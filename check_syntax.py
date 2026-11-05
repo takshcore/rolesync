@@ -54,7 +54,7 @@ for path in FILES:
 
 print("=" * 80)
 print(f"Total Lines of Pure Python & Config: {total_lines:,}")
-print("Result: " + ("ALL MODULES FULLY VALIDATED ✓" if all_ok else "ERRORS DETECTED ✗"))
+print("Result: " + ("ALL MODULES FULLY VALIDATED [OK]" if all_ok else "ERRORS DETECTED [FAIL]"))
 print("=" * 80)
 
 sys.exit(0 if all_ok else 1)
