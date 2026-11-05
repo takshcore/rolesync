@@ -7,46 +7,67 @@ echo   RoleSync - 1-Click Launcher
 echo ============================================================
 echo.
 
-REM 1. Ensure the virtual environment exists
-if not exist ".venv\Scripts\python.exe" (
-    echo [*] Creating virtual environment (.venv)...
-    python -m venv .venv
-    if errorlevel 1 (
-        echo [!] Failed to create .venv. Please make sure Python is installed.
-        pause
-        exit /b 1
-    )
-)
+REM 1. Check if virtual environment python exists
+if exist ".venv\Scripts\python.exe" goto check_deps
 
-REM 2. Verify if required dependencies are installed
+echo [*] Virtual environment not found. Creating .venv...
+python -m venv .venv
+if errorlevel 1 goto venv_error
+
+:check_deps
 echo [*] Checking dependencies...
 ".venv\Scripts\python.exe" -c "import dotenv, PyQt6, docx" >nul 2>&1
-if errorlevel 1 (
-    echo.
-    echo [*] First-time setup detected: Installing required packages...
-    echo [*] This will take a couple of minutes. Please wait...
-    echo.
-    ".venv\Scripts\python.exe" -m pip install --upgrade pip
-    ".venv\Scripts\python.exe" -m pip install -r requirements.txt
-    if errorlevel 1 (
-        echo [!] Failed to install dependencies from requirements.txt.
-        pause
-        exit /b 1
-    )
-    echo [*] Installing Playwright Chromium browser...
-    ".venv\Scripts\python.exe" -m playwright install chromium
-    echo.
-    echo [✓] All packages installed successfully!
-    echo.
-)
+if not errorlevel 1 goto launch_app
 
-REM 3. Launch the desktop application
+echo.
+echo [*] First-time setup detected: Installing required packages...
+echo [*] This will take a few minutes. Please wait...
+echo.
+".venv\Scripts\python.exe" -m pip install --upgrade pip
+".venv\Scripts\python.exe" -m pip install -r requirements.txt
+if errorlevel 1 goto install_error
+
+echo [*] Installing Playwright Chromium browser...
+".venv\Scripts\python.exe" -m playwright install chromium
+if errorlevel 1 goto playwright_error
+
+echo.
+echo [*] All packages installed successfully!
+echo.
+
+:launch_app
 echo [*] Starting RoleSync Desktop Overlay...
 ".venv\Scripts\python.exe" main.py
+if errorlevel 1 goto app_error
 
-if errorlevel 1 (
-    echo.
-    echo [!] Application exited with an error.
-    echo Press any key to close this window.
-    pause >nul
-)
+echo.
+echo [*] RoleSync closed cleanly.
+goto finish
+
+:venv_error
+echo.
+echo [!] ERROR: Failed to create virtual environment.
+echo Please verify that Python is installed and available in PATH.
+goto finish
+
+:install_error
+echo.
+echo [!] ERROR: Failed installing packages from requirements.txt.
+goto finish
+
+:playwright_error
+echo.
+echo [!] ERROR: Failed installing Playwright browser.
+goto finish
+
+:app_error
+echo.
+echo [!] ERROR: RoleSync encountered an error while running.
+goto finish
+
+:finish
+echo.
+echo ============================================================
+echo Press any key to exit this window...
+echo ============================================================
+pause >nul
