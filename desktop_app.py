@@ -17,6 +17,8 @@ Public API consumed by other modules
 
 from __future__ import annotations
 
+import json
+import pathlib
 import sys
 import textwrap
 from datetime import datetime
@@ -757,15 +759,19 @@ class PreviewPane(QFrame):
         portfolio_text = self.prof_portfolio.toPlainText().strip()
         try:
             parsed = json.loads(portfolio_text)
-            if not isinstance(parsed, list):
-                raise ValueError("Portfolio must be a JSON array of projects.")
+            if isinstance(parsed, list):
+                portfolio_to_save = {"projects": parsed}
+            elif isinstance(parsed, dict) and "projects" in parsed and isinstance(parsed["projects"], list):
+                portfolio_to_save = parsed
+            else:
+                raise ValueError("Portfolio must be a JSON array of projects or an object containing a 'projects' list.")
         except Exception as err:
             QMessageBox.warning(self, "Invalid JSON", f"Portfolio JSON error:\n{err}")
             return
 
         try:
             self._profile_path.write_text(json.dumps(profile_data, indent=2), encoding="utf-8")
-            self._portfolio_path.write_text(json.dumps(parsed, indent=2), encoding="utf-8")
+            self._portfolio_path.write_text(json.dumps(portfolio_to_save, indent=2), encoding="utf-8")
             self.profile_updated.emit()
             self.show_resume_view()
         except Exception as err:
