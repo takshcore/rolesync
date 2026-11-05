@@ -44,6 +44,7 @@ from PyQt6.QtGui import (
 )
 from PyQt6.QtWidgets import (
     QApplication,
+    QFileDialog,
     QFormLayout,
     QFrame,
     QHBoxLayout,
@@ -634,9 +635,52 @@ class PreviewPane(QFrame):
         lay.setContentsMargins(16, 12, 16, 12)
         lay.setSpacing(10)
 
-        hint = QLabel("👤 <b>Candidate Profile & Truth Source:</b> Update your real details and projects here for mathematical ATS matching.")
+        hint = QLabel("👤 <b>Candidate Profile & Truth Source:</b> Feed your real resume file below or edit your projects for mathematical ATS matching.")
         hint.setStyleSheet(f"color:{_PALETTE['accent']}; font-size:12px;")
         lay.addWidget(hint)
+
+        # Master Resume File Ingestion Banner
+        upload_box = QFrame()
+        upload_box.setStyleSheet(f"""
+            QFrame {{
+                background: {_PALETTE['bg_input']};
+                border: 1px dashed {_PALETTE['accent']};
+                border-radius: 8px;
+            }}
+        """)
+        u_lay = QHBoxLayout(upload_box)
+        u_lay.setContentsMargins(14, 10, 14, 10)
+        u_lay.setSpacing(14)
+
+        u_info_lay = QVBoxLayout()
+        u_info_lay.setSpacing(2)
+        u_title = QLabel("📄 <b>Feed Your Own Master Résumé (.pdf, .docx, .txt)</b>")
+        u_title.setStyleSheet("font-size:12px; font-weight:700; color:#e8ecf4;")
+        self.lbl_master_resume = QLabel("Import your original resume to automatically extract your real projects, skills, and contact details as the ground-truth.")
+        self.lbl_master_resume.setStyleSheet(f"font-size:11px; color:{_PALETTE['text_muted']};")
+        u_info_lay.addWidget(u_title)
+        u_info_lay.addWidget(self.lbl_master_resume)
+
+        self.btn_upload_resume = QPushButton("📂  Import Resume File")
+        self.btn_upload_resume.setStyleSheet(f"""
+            QPushButton {{
+                background: {_PALETTE['accent']};
+                color: #ffffff;
+                border: none;
+                border-radius: 6px;
+                padding: 7px 16px;
+                font-weight: 700;
+                font-size: 11px;
+            }}
+            QPushButton:hover {{
+                background: #4a6ee0;
+            }}
+        """)
+        self.btn_upload_resume.clicked.connect(self._on_import_resume_clicked)
+
+        u_lay.addLayout(u_info_lay, stretch=1)
+        u_lay.addWidget(self.btn_upload_resume)
+        lay.addWidget(upload_box)
 
         tabs = QTabWidget()
         tabs.setStyleSheet(f"""
@@ -722,6 +766,37 @@ class PreviewPane(QFrame):
         self._company_lbl.show()
         self._stack.setCurrentIndex(0)
 
+    def _on_import_resume_clicked(self) -> None:
+        """Allow user to select their original resume file, parse it, and populate the system."""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Select Your Original Resume File",
+            "",
+            "Resume Files (*.pdf *.docx *.doc *.txt);;PDF Documents (*.pdf);;Word Documents (*.docx);;Text Files (*.txt);;All Files (*)"
+        )
+        if not file_path:
+            return
+
+        try:
+            from resume_parser import ingest_master_resume
+            report = ingest_master_resume(file_path)
+            self._load_profile_data()
+            self.lbl_master_resume.setText(
+                f"✅ Ground-Truth Active: {report['filename']} ({report['project_count']} real projects/experiences extracted)"
+            )
+            self.lbl_master_resume.setStyleSheet("font-size:11px; color:#2ecc71; font-weight:600;")
+            self.profile_updated.emit()
+            QMessageBox.information(
+                self,
+                "Master Resume Ingested Successfully",
+                f"Successfully parsed your resume '{report['filename']}':\n"
+                f"• Candidate: {report['name']} ({report['email']})\n"
+                f"• Real Projects / Experiences Extracted: {report['project_count']}\n\n"
+                "Your ground-truth profile and ChromaDB vector index have been updated."
+            )
+        except Exception as e:
+            QMessageBox.critical(self, "Resume Ingestion Failed", f"Could not parse resume:\n{e}")
+
     def _load_profile_data(self) -> None:
         """Load from profile.json and master_portfolio.json."""
         if self._profile_path.exists():
@@ -734,6 +809,12 @@ class PreviewPane(QFrame):
                 self.prof_github.setText(data.get("github", ""))
                 self.prof_location.setText(data.get("location", ""))
                 self.prof_exp.setValue(data.get("years_exp", 0))
+
+                if "master_resume_filename" in data:
+                    self.lbl_master_resume.setText(
+                        f"✅ Ground-Truth Active: {data['master_resume_filename']}"
+                    )
+                    self.lbl_master_resume.setStyleSheet("font-size:11px; color:#2ecc71; font-weight:600;")
             except Exception as e:
                 print(f"Error loading profile: {e}")
 
@@ -746,7 +827,15 @@ class PreviewPane(QFrame):
 
     def _save_profile(self) -> None:
         """Save profile and portfolio, emit signal, and return to resume view."""
+        existing_profile = {}
+        if self._profile_path.exists():
+            try:
+                existing_profile = json.loads(self._profile_path.read_text(encoding="utf-8"))
+            except Exception:
+                existing_profile = {}
+
         profile_data = {
+            **existing_profile,
             "name": self.prof_name.text().strip() or "Candidate",
             "email": self.prof_email.text().strip(),
             "phone": self.prof_phone.text().strip(),
