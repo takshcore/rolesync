@@ -51,7 +51,6 @@ from PyQt6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMainWindow,
-    QMessageBox,
     QPushButton,
     QScrollArea,
     QSizePolicy,
@@ -730,6 +729,11 @@ class PreviewPane(QFrame):
 
         lay.addWidget(tabs, stretch=1)
 
+        # Inline status indicator for errors or notifications (zero modal freezes)
+        self.lbl_profile_status = QLabel("")
+        self.lbl_profile_status.setStyleSheet("font-size: 11px; padding: 2px 0px;")
+        lay.addWidget(self.lbl_profile_status)
+
         # Bottom actions
         act_row = QHBoxLayout()
         btn_back = QPushButton("←  Cancel & Back")
@@ -778,24 +782,26 @@ class PreviewPane(QFrame):
             return
 
         try:
+            self.lbl_profile_status.setText("⏳ Ingesting and parsing your resume...")
+            self.lbl_profile_status.setStyleSheet(f"color:{_PALETTE['accent']}; font-size:11px;")
+            QApplication.processEvents()
+
             from resume_parser import ingest_master_resume
             report = ingest_master_resume(file_path)
             self._load_profile_data()
+
             self.lbl_master_resume.setText(
                 f"✅ Ground-Truth Active: {report['filename']} ({report['project_count']} real projects/experiences extracted)"
             )
             self.lbl_master_resume.setStyleSheet("font-size:11px; color:#2ecc71; font-weight:600;")
-            self.profile_updated.emit()
-            QMessageBox.information(
-                self,
-                "Master Resume Ingested Successfully",
-                f"Successfully parsed your resume '{report['filename']}':\n"
-                f"• Candidate: {report['name']} ({report['email']})\n"
-                f"• Real Projects / Experiences Extracted: {report['project_count']}\n\n"
-                "Your ground-truth profile and ChromaDB vector index have been updated."
+            self.lbl_profile_status.setText(
+                f"✅ Ingested '{report['filename']}'! Loaded {report['project_count']} projects & contact info. Click 'Save & Back to Résumé' below."
             )
+            self.lbl_profile_status.setStyleSheet("color:#2ecc71; font-size:11px; font-weight:600;")
+            self.profile_updated.emit()
         except Exception as e:
-            QMessageBox.critical(self, "Resume Ingestion Failed", f"Could not parse resume:\n{e}")
+            self.lbl_profile_status.setText(f"❌ Resume Ingestion Failed: {e}")
+            self.lbl_profile_status.setStyleSheet("color:#e74c3c; font-size:11px; font-weight:600;")
 
     def _load_profile_data(self) -> None:
         """Load from profile.json and master_portfolio.json."""
@@ -826,7 +832,7 @@ class PreviewPane(QFrame):
                 print(f"Error loading portfolio: {e}")
 
     def _save_profile(self) -> None:
-        """Save profile and portfolio, emit signal, and return to resume view."""
+        """Save profile and portfolio, emit signal, and return to resume view without modal freezing."""
         existing_profile = {}
         if self._profile_path.exists():
             try:
@@ -855,7 +861,8 @@ class PreviewPane(QFrame):
             else:
                 raise ValueError("Portfolio must be a JSON array of projects or an object containing a 'projects' list.")
         except Exception as err:
-            QMessageBox.warning(self, "Invalid JSON", f"Portfolio JSON error:\n{err}")
+            self.lbl_profile_status.setText(f"⚠️ Portfolio JSON Error: {err}")
+            self.lbl_profile_status.setStyleSheet("color:#e74c3c; font-size:11px; font-weight:600;")
             return
 
         try:
@@ -864,7 +871,8 @@ class PreviewPane(QFrame):
             self.profile_updated.emit()
             self.show_resume_view()
         except Exception as err:
-            QMessageBox.critical(self, "Save Error", f"Failed saving data: {err}")
+            self.lbl_profile_status.setText(f"❌ Save Error: {err}")
+            self.lbl_profile_status.setStyleSheet("color:#e74c3c; font-size:11px; font-weight:600;")
 
     # ── Edit Mode Logic ───────────────────────────────────────────────────────
 
