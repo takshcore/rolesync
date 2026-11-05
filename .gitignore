@@ -1,0 +1,61 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environments
+.venv/
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Environment variables & secrets
+.env
+.env.local
+.env.*.local
+
+# ChromaDB local persistent database
+.chromadb/
+
+# RoleSync Runtime Artifacts (keep directories, ignore runtime data)
+active_workspace/*
+!active_workspace/.gitkeep
+active_workspace/screenshots/*
+!active_workspace/screenshots/.gitkeep
+
+# Vault runtime databases and archives (keep directory, ignore runtime DB)
+vault/*
+!vault/.gitkeep
+vault/*.db
+vault/*.db-journal
+
+# Logs
+logs/*
+!logs/.gitkeep
+*.log
+
+# IDEs & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
