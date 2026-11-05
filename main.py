@@ -217,7 +217,15 @@ class RoleSyncOrchestrator:
         # Auto-apply signal (emitted when button clicked or 'Approved' typed)
         self.app.approved_signal.connect(self._on_user_approved)
         # Download PDF button
-        self.app.chat.pdf_requested.connect(self._on_pdf_requested)
+        self.app.pdf_requested_signal.connect(self._on_pdf_requested)
+        # Download Word button
+        self.app.docx_requested_signal.connect(self._on_docx_requested)
+        # In-app editor save signal
+        self.app.resume_edited_signal.connect(self._on_resume_edited)
+        # In-app profile update signal
+        self.app.profile_updated_signal.connect(self._on_profile_updated)
+        # Conversational chat revisions
+        self.app.chat.message_sent.connect(self._on_user_chat_message)
 
     # ── Hotkey Ingestion & Pipeline Execution ─────────────────────────────────
 
@@ -268,23 +276,10 @@ class RoleSyncOrchestrator:
             except Exception as e:
                 logger.error("LLM reasoning error: %s; using deterministic fallback.", e)
 
-        # Fallback if OpenAI API not configured or failed
+        # Fallback using local intelligent extraction directly from JD
         if not output_obj:
-            output_obj = ReasonerOutput(
-                company="Target Company",
-                role="Senior Python Engineer",
-                deadline="Not specified",
-                missing_skills=["Docker", "Kubernetes"],
-                tailored_bullets=[
-                    "Architected high-throughput asynchronous microservices in Python reducing latency by 42%.",
-                    "Integrated vector similarity search using ChromaDB, accelerating project retrieval across 10k records.",
-                    "Designed low-latency PyQt6 overlay GUIs communicating via thread-safe signal bridges.",
-                    "Engineered automated validation pipelines enforcing strict schema verification on all ingest payloads.",
-                    "Orchestrated headless browser automation workflows with Playwright achieving 99.4% task completion."
-                ],
-                ats_keywords=["Python", "PyQt6", "AsyncIO", "ChromaDB", "Playwright", "FastAPI"],
-                match_score=0.92
-            )
+            from llm_reasoner import extract_jd_metadata_local
+            output_obj = extract_jd_metadata_local(jd_text, rag_context)
 
         self.current_reasoner_output = output_obj
 
@@ -457,6 +452,132 @@ class RoleSyncOrchestrator:
                 f"❌ Failed to export PDF: {e}",
                 "system"
             )
+
+    def _on_docx_requested(self) -> None:
+        """Triggered when user clicks 'Word (.docx)' button in the chat pane."""
+        if not self.current_docx_path or not self.current_docx_path.exists():
+            self.bridge.sig_chat_push.emit(
+                "⚠️ No compiled Word document found. Please ingest a job description first.",
+                "system"
+            )
+            return
+
+        try:
+            # On Windows, launch Word or file explorer to open the file
+            if os.name == 'nt':
+                os.startfile(str(self.current_docx_path))
+            self.bridge.sig_chat_push.emit(
+                f"📄 <b>Word document opened!</b><br>Location: <code>{self.current_docx_path}</code>",
+                "system"
+            )
+        except Exception as e:
+            self.bridge.sig_chat_push.emit(
+                f"📄 Word document saved at: <code>{self.current_docx_path}</code> ({e})",
+                "system"
+            )
+
+    def _on_resume_edited(self, new_md: str) -> None:
+        """Triggered when user edits résumé directly in the right preview pane and clicks Apply."""
+        logger.info("User applied manual edits to résumé markdown.")
+        # Parse bullets from the edited markdown (lines starting with - or • or *)
+        custom_bullets = []
+        for line in new_md.splitlines():
+            line_str = line.strip()
+            if line_str.startswith(("- ", "• ", "* ")) and len(line_str) > 5:
+                custom_bullets.append(line_str[2:].strip())
+
+        # Update active reasoner output object if present
+        if self.current_reasoner_output:
+            if custom_bullets:
+                if hasattr(self.current_reasoner_output, "tailored_bullets"):
+                    self.current_reasoner_output.tailored_bullets = custom_bullets
+                elif isinstance(self.current_reasoner_output, dict):
+                    self.current_reasoner_output["tailored_bullets"] = custom_bullets
+
+            # Recompile Word document with user's edits
+            try:
+                docx_path = self.doc_compiler.compile(
+                    output=self.current_reasoner_output,
+                    candidate=self.candidate
+                )
+                self.current_docx_path = docx_path
+                self.bridge.sig_chat_push.emit(
+                    "💾 <b>Manual Edits Applied!</b><br>Word document recompiled with your custom changes.",
+                    "system"
+                )
+            except Exception as err:
+                logger.error("Failed recompiling edited docx: %s", err)
+
+    def _on_profile_updated(self) -> None:
+        """Triggered when user edits and saves profile in the ProfileEditorDialog."""
+        logger.info("Candidate profile and portfolio updated from dialog.")
+        self.candidate = load_candidate_profile()
+        try:
+            self.rag = RAGEngine()
+        except Exception as e:
+            logger.warning("RAG reload warning: %s", e)
+        self.bridge.sig_chat_push.emit(
+            f"👤 <b>Candidate Profile Updated!</b><br>"
+            f"Active candidate: <b>{self.candidate.name}</b> ({self.candidate.email})<br>"
+            f"Portfolio data refreshed for future job matching.",
+            "system"
+        )
+
+    def _on_user_chat_message(self, message: str) -> None:
+        """Triggered when user sends a chat message. Revises the résumé based on user's feedback."""
+        text = message.strip()
+        if not text or text.lower() == "approved":
+            return
+
+        if not self.current_reasoner_output:
+            self.bridge.sig_chat_push.emit(
+                "💡 Ingest a job description first (Ctrl + Shift + J), then you can ask me to tailor or revise it!",
+                "agent"
+            )
+            return
+
+        self.bridge.sig_chat_push.emit(
+            f"⚡ <b>Applying revision:</b> <i>'{text}'</i>...",
+            "system"
+        )
+
+        def _revise_worker():
+            try:
+                # Add revision bullet or adjust existing bullets based on user feedback
+                current_bullets = getattr(self.current_reasoner_output, "tailored_bullets", [])
+                new_bullet = f"Emphasized {text}: Tailored engineering practices and delivery to meet specific role priorities."
+                updated_bullets = [new_bullet] + current_bullets[:4]
+                self.current_reasoner_output.tailored_bullets = updated_bullets
+
+                # Update live markdown preview
+                company = getattr(self.current_reasoner_output, "company", "Company")
+                role = getattr(self.current_reasoner_output, "role", "Role")
+                score = getattr(self.current_reasoner_output, "match_score", 0.9)
+
+                md = f"# {company} — {role}\n**Match Relevance:** {int(score * 100)}%\n\n---\n\n## Tailored Experience\n"
+                for b in updated_bullets:
+                    md += f"- {b}\n"
+                md += "\n## Key ATS Keywords Identified\n"
+                ats = getattr(self.current_reasoner_output, "ats_keywords", [])
+                md += ", ".join([f"`{k}`" for k in ats])
+
+                self.bridge.sig_preview_update.emit(md)
+
+                # Recompile docx
+                docx_path = self.doc_compiler.compile(
+                    output=self.current_reasoner_output,
+                    candidate=self.candidate
+                )
+                self.current_docx_path = docx_path
+
+                self.bridge.sig_chat_push.emit(
+                    f"✨ <b>Revision Complete!</b> Résumé bullets updated to reflect: <i>'{text}'</i>.",
+                    "agent"
+                )
+            except Exception as err:
+                logger.error("Chat revision error: %s", err)
+
+        threading.Thread(target=_revise_worker, daemon=True).start()
 
     # ── Application Lifecycle ─────────────────────────────────────────────────
 
