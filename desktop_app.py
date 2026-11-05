@@ -42,16 +42,20 @@ from PyQt6.QtGui import (
 )
 from PyQt6.QtWidgets import (
     QApplication,
+    QFormLayout,
     QFrame,
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QMainWindow,
+    QMessageBox,
     QPushButton,
     QScrollArea,
     QSizePolicy,
+    QSpinBox,
     QSplitter,
     QStackedWidget,
+    QTabWidget,
     QTextBrowser,
     QTextEdit,
     QVBoxLayout,
@@ -488,24 +492,30 @@ class ChatPanel(QFrame):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Preview Pane (With In-App Editing Support)
+# Preview Pane (With In-App Editing & Profile Manager)
 # ══════════════════════════════════════════════════════════════════════════════
 
 class PreviewPane(QFrame):
     """
-    Right pane: live Markdown → HTML résumé preview with direct in-app editing mode.
+    Right pane: live Markdown → HTML résumé preview, direct in-app editing,
+    and integrated Profile & Portfolio Knowledge Base settings view.
 
     Signals
     ───────
     resume_edited(str) – emitted when user saves manual edits in the editor
+    profile_updated()  – emitted when user updates profile/portfolio
     """
 
-    resume_edited = pyqtSignal(str)
+    resume_edited   = pyqtSignal(str)
+    profile_updated = pyqtSignal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setObjectName("panel")
         self._current_md: str = _PLACEHOLDER_MD
+        self._profile_path = pathlib.Path("f:/agent/profile.json")
+        self._portfolio_path = pathlib.Path("f:/agent/master_portfolio.json")
+
         self._setup_ui()
         self.load_md(_PLACEHOLDER_MD)
 
@@ -521,8 +531,8 @@ class PreviewPane(QFrame):
         h_lay.setContentsMargins(16, 10, 16, 10)
         h_lay.setSpacing(12)
 
-        title = QLabel("📄  Résumé Preview")
-        title.setStyleSheet("font-size: 15px; font-weight: 700;")
+        self._title_lbl = QLabel("📄  Résumé Preview")
+        self._title_lbl.setStyleSheet("font-size: 15px; font-weight: 700;")
 
         self.btn_edit_toggle = QPushButton("✏️  Edit Résumé")
         self.btn_edit_toggle.setStyleSheet(
@@ -532,11 +542,21 @@ class PreviewPane(QFrame):
         )
         self.btn_edit_toggle.clicked.connect(self._toggle_edit_mode)
 
+        self.btn_back_resume = QPushButton("←  Back to Résumé")
+        self.btn_back_resume.setStyleSheet(
+            f"background:{_PALETTE['bg_input']}; color:{_PALETTE['accent']};"
+            f"border:1px solid {_PALETTE['border']}; border-radius:6px;"
+            f"padding:5px 12px; font-size:11px; font-weight:600;"
+        )
+        self.btn_back_resume.clicked.connect(self.show_resume_view)
+        self.btn_back_resume.hide()
+
         self._company_lbl = QLabel("")
         self._company_lbl.setStyleSheet(f"color:{_PALETTE['accent']}; font-size:12px;")
 
-        h_lay.addWidget(title)
+        h_lay.addWidget(self._title_lbl)
         h_lay.addWidget(self.btn_edit_toggle)
+        h_lay.addWidget(self.btn_back_resume)
         h_lay.addStretch()
         h_lay.addWidget(self._company_lbl)
         root.addWidget(header)
@@ -546,7 +566,10 @@ class PreviewPane(QFrame):
         divider.setStyleSheet(f"border-top: 1px solid {_PALETTE['border']};")
         root.addWidget(divider)
 
-        # Stacked Widget (Page 0 = HTML Preview, Page 1 = In-App Editor)
+        # Main Stacked Widget
+        # Page 0 = HTML Preview
+        # Page 1 = In-App Markdown Editor
+        # Page 2 = In-App Profile & Portfolio Settings
         self._stack = QStackedWidget()
 
         # Page 0: HTML Browser
@@ -594,20 +617,168 @@ class PreviewPane(QFrame):
         edit_actions.addWidget(btn_cancel_edit)
         edit_actions.addWidget(btn_save_edit)
         edit_lay.addLayout(edit_actions)
-
         self._stack.addWidget(edit_container)
+
+        # Page 2: In-App Profile & Portfolio Settings
+        self._stack.addWidget(self._setup_profile_page())
+
         root.addWidget(self._stack, stretch=1)
+
+    # ── Page 2: Profile & Portfolio Page Setup ────────────────────────────────
+
+    def _setup_profile_page(self) -> QWidget:
+        container = QWidget()
+        lay = QVBoxLayout(container)
+        lay.setContentsMargins(16, 12, 16, 12)
+        lay.setSpacing(10)
+
+        hint = QLabel("👤 <b>Candidate Profile & Truth Source:</b> Update your real details and projects here for mathematical ATS matching.")
+        hint.setStyleSheet(f"color:{_PALETTE['accent']}; font-size:12px;")
+        lay.addWidget(hint)
+
+        tabs = QTabWidget()
+        tabs.setStyleSheet(f"""
+            QTabWidget::pane {{ border: 1px solid {_PALETTE['border']}; background: {_PALETTE['bg_panel']}; border-radius: 8px; }}
+            QTabBar::tab {{ background: {_PALETTE['bg_input']}; color: {_PALETTE['text_muted']}; padding: 6px 14px; border-radius: 4px; margin-right: 4px; }}
+            QTabBar::tab:selected {{ background: {_PALETTE['bg_panel']}; color: {_PALETTE['accent']}; font-weight: 700; }}
+        """)
+
+        # Tab 1: Personal Info
+        t1 = QWidget()
+        f_lay = QFormLayout(t1)
+        f_lay.setContentsMargins(14, 14, 14, 14)
+        f_lay.setSpacing(8)
+
+        self.prof_name = QLineEdit()
+        self.prof_email = QLineEdit()
+        self.prof_phone = QLineEdit()
+        self.prof_linkedin = QLineEdit()
+        self.prof_github = QLineEdit()
+        self.prof_location = QLineEdit()
+        self.prof_exp = QSpinBox()
+        self.prof_exp.setRange(0, 40)
+        self.prof_exp.setSuffix(" yrs")
+
+        f_lay.addRow("Full Name:", self.prof_name)
+        f_lay.addRow("Email:", self.prof_email)
+        f_lay.addRow("Phone:", self.prof_phone)
+        f_lay.addRow("LinkedIn:", self.prof_linkedin)
+        f_lay.addRow("GitHub:", self.prof_github)
+        f_lay.addRow("Location:", self.prof_location)
+        f_lay.addRow("Experience:", self.prof_exp)
+        tabs.addTab(t1, "👤 Personal & Contact Info")
+
+        # Tab 2: Real Projects & Portfolio
+        t2 = QWidget()
+        v2 = QVBoxLayout(t2)
+        v2.setContentsMargins(14, 14, 14, 14)
+        v2.setSpacing(6)
+        lbl_p = QLabel("Real Projects & Work History (JSON array matched by ChromaDB vector search):")
+        lbl_p.setStyleSheet(f"color:{_PALETTE['text_muted']}; font-size:11px;")
+        v2.addWidget(lbl_p)
+
+        self.prof_portfolio = QTextEdit()
+        self.prof_portfolio.setStyleSheet(f"font-family:'Consolas','Courier New',monospace; font-size:12px; background:{_PALETTE['bg_input']};")
+        v2.addWidget(self.prof_portfolio, stretch=1)
+        tabs.addTab(t2, "💼 Real Projects & Experience")
+
+        lay.addWidget(tabs, stretch=1)
+
+        # Bottom actions
+        act_row = QHBoxLayout()
+        btn_back = QPushButton("←  Cancel & Back")
+        btn_back.setStyleSheet(f"background:{_PALETTE['bg_input']}; color:{_PALETTE['text_primary']}; border:1px solid {_PALETTE['border']}; border-radius:6px; padding:6px 14px;")
+        btn_back.clicked.connect(self.show_resume_view)
+
+        btn_save = QPushButton("💾  Save & Back to Résumé")
+        btn_save.setStyleSheet(f"background:{_PALETTE['success']}; color:#fff; border:none; border-radius:6px; padding:6px 18px; font-weight:600;")
+        btn_save.clicked.connect(self._save_profile)
+
+        act_row.addWidget(btn_back)
+        act_row.addStretch()
+        act_row.addWidget(btn_save)
+        lay.addLayout(act_row)
+
+        return container
+
+    # ── View Switching & Profile Data Logic ───────────────────────────────────
+
+    def show_profile_view(self) -> None:
+        """Switch to in-app profile view without opening any separate window."""
+        self._load_profile_data()
+        self._title_lbl.setText("⚙️  Profile & Portfolio Settings")
+        self.btn_edit_toggle.hide()
+        self.btn_back_resume.show()
+        self._company_lbl.hide()
+        self._stack.setCurrentIndex(2)
+
+    def show_resume_view(self) -> None:
+        """Switch back to live résumé preview."""
+        self._title_lbl.setText("📄  Résumé Preview")
+        self.btn_edit_toggle.show()
+        self.btn_back_resume.hide()
+        self._company_lbl.show()
+        self._stack.setCurrentIndex(0)
+
+    def _load_profile_data(self) -> None:
+        """Load from profile.json and master_portfolio.json."""
+        if self._profile_path.exists():
+            try:
+                data = json.loads(self._profile_path.read_text(encoding="utf-8"))
+                self.prof_name.setText(data.get("name", ""))
+                self.prof_email.setText(data.get("email", ""))
+                self.prof_phone.setText(data.get("phone", ""))
+                self.prof_linkedin.setText(data.get("linkedin", ""))
+                self.prof_github.setText(data.get("github", ""))
+                self.prof_location.setText(data.get("location", ""))
+                self.prof_exp.setValue(data.get("years_exp", 0))
+            except Exception as e:
+                print(f"Error loading profile: {e}")
+
+        if self._portfolio_path.exists():
+            try:
+                content = self._portfolio_path.read_text(encoding="utf-8")
+                self.prof_portfolio.setPlainText(content)
+            except Exception as e:
+                print(f"Error loading portfolio: {e}")
+
+    def _save_profile(self) -> None:
+        """Save profile and portfolio, emit signal, and return to resume view."""
+        profile_data = {
+            "name": self.prof_name.text().strip() or "Candidate",
+            "email": self.prof_email.text().strip(),
+            "phone": self.prof_phone.text().strip(),
+            "linkedin": self.prof_linkedin.text().strip(),
+            "github": self.prof_github.text().strip(),
+            "location": self.prof_location.text().strip(),
+            "years_exp": self.prof_exp.value(),
+        }
+
+        portfolio_text = self.prof_portfolio.toPlainText().strip()
+        try:
+            parsed = json.loads(portfolio_text)
+            if not isinstance(parsed, list):
+                raise ValueError("Portfolio must be a JSON array of projects.")
+        except Exception as err:
+            QMessageBox.warning(self, "Invalid JSON", f"Portfolio JSON error:\n{err}")
+            return
+
+        try:
+            self._profile_path.write_text(json.dumps(profile_data, indent=2), encoding="utf-8")
+            self._portfolio_path.write_text(json.dumps(parsed, indent=2), encoding="utf-8")
+            self.profile_updated.emit()
+            self.show_resume_view()
+        except Exception as err:
+            QMessageBox.critical(self, "Save Error", f"Failed saving data: {err}")
 
     # ── Edit Mode Logic ───────────────────────────────────────────────────────
 
     def _toggle_edit_mode(self) -> None:
         if self._stack.currentIndex() == 0:
-            # Enter edit mode
             self._editor.setPlainText(self._current_md)
             self._stack.setCurrentIndex(1)
             self.btn_edit_toggle.setText("👁️  Preview Mode")
         else:
-            # Exit edit mode back to preview
             self._stack.setCurrentIndex(0)
             self.btn_edit_toggle.setText("✏️  Edit Résumé")
 
@@ -757,7 +928,7 @@ class _MainWindow(QMainWindow):
             f"border:1px solid {_PALETTE['border']}; border-radius:6px;"
             f"padding:4px 12px; font-size:11px; font-weight:600;"
         )
-        btn_profile.clicked.connect(self._open_profile_dialog)
+        btn_profile.clicked.connect(self._on_profile_clicked)
 
         lay.addWidget(logo)
         lay.addWidget(btn_profile)
@@ -766,14 +937,9 @@ class _MainWindow(QMainWindow):
         lay.addWidget(btn_close)
         return bar
 
-    def _open_profile_dialog(self) -> None:
-        try:
-            from profile_editor import ProfileEditorDialog
-            dlg = ProfileEditorDialog(parent=self)
-            dlg.data_saved.connect(self.profile_updated.emit)
-            dlg.exec()
-        except Exception as e:
-            print(f"Error opening profile editor: {e}")
+    def _on_profile_clicked(self) -> None:
+        """Switch right pane to Profile & Portfolio settings view without any popup window."""
+        self.preview_pane.show_profile_view()
 
     # ── Drag-to-move ──────────────────────────────────────────────────────────
 
@@ -797,6 +963,7 @@ class _MainWindow(QMainWindow):
         self.chat_panel.message_sent.connect(self._on_chat_message)
         self.chat_panel.approved.connect(self._on_approved)
         self.chat_panel.pdf_requested.connect(self._on_pdf_requested)
+        self.preview_pane.profile_updated.connect(self.profile_updated.emit)
 
     @pyqtSlot(str)
     def _on_chat_message(self, text: str) -> None:
