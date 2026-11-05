@@ -512,13 +512,19 @@ class RoleSyncOrchestrator:
         """Triggered when user edits and saves profile or imports a master resume file."""
         logger.info("Candidate profile and portfolio updated.")
         self.candidate = load_candidate_profile()
-        try:
-            if hasattr(self, "rag") and self.rag:
-                self.rag.reload_portfolio()
-            else:
-                self.rag = RAGEngine()
-        except Exception as e:
-            logger.warning("RAG reload warning: %s", e)
+
+        # Reload ChromaDB vectors in a background thread so GUI never freezes
+        def _reload_rag_async():
+            try:
+                if hasattr(self, "rag") and self.rag:
+                    self.rag.reload_portfolio()
+                else:
+                    self.rag = RAGEngine()
+                logger.info("ChromaDB vector index reloaded successfully in background.")
+            except Exception as e:
+                logger.warning("RAG reload warning: %s", e)
+
+        threading.Thread(target=_reload_rag_async, daemon=True).start()
 
         # Check if master resume was ingested
         prof_dict = {}
