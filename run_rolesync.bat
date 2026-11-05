@@ -10,8 +10,8 @@ echo.
 REM 1. Check if virtual environment python exists
 if exist ".venv\Scripts\python.exe" goto check_deps
 
-echo [*] Virtual environment not found. Creating .venv...
-python -m venv .venv
+echo [*] Virtual environment not found. Creating .venv using Python 3.11...
+py -3.11 -m venv .venv 2>nul || python -m venv .venv
 if errorlevel 1 goto venv_error
 
 :check_deps
