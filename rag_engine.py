@@ -584,6 +584,12 @@ class RAGEngine:
         context_block: str = "\n".join(lines)
         return context_block
 
+    def reload_portfolio(self) -> None:
+        """Reload master_portfolio.json from disk and re-embed all documents into ChromaDB."""
+        self.portfolio = load_portfolio(self.portfolio_path)
+        self._upsert_portfolio()
+        print(f"[RAGEngine] Portfolio reloaded & re-indexed ({len(self.portfolio)} projects).")
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Standalone smoke test
