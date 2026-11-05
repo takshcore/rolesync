@@ -51,6 +51,7 @@ from PyQt6.QtWidgets import (
     QScrollArea,
     QSizePolicy,
     QSplitter,
+    QStackedWidget,
     QTextBrowser,
     QTextEdit,
     QVBoxLayout,
@@ -310,6 +311,7 @@ class ChatPanel(QFrame):
     message_sent   = pyqtSignal(str)
     approved       = pyqtSignal()
     pdf_requested  = pyqtSignal()
+    docx_requested = pyqtSignal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -403,7 +405,7 @@ class ChatPanel(QFrame):
 
         # Action buttons row
         action_row = QHBoxLayout()
-        action_row.setSpacing(8)
+        action_row.setSpacing(6)
 
         btn_apply = QPushButton("🚀  Auto-Apply")
         btn_apply.setObjectName("btnApply")
@@ -412,20 +414,31 @@ class ChatPanel(QFrame):
         btn_apply.clicked.connect(self._on_approved)
         btn_apply.setStyleSheet(
             f"background:{_PALETTE['success']};color:#fff;"
-            f"border:none;border-radius:8px;padding:8px 20px;font-weight:600;"
+            f"border:none;border-radius:8px;padding:8px 14px;font-weight:600;"
         )
 
-        btn_pdf = QPushButton("⬇  Download PDF")
+        btn_docx = QPushButton("📄  Word (.docx)")
+        btn_docx.setObjectName("btnDocx")
+        btn_docx.setMinimumHeight(38)
+        btn_docx.clicked.connect(self.docx_requested.emit)
+        btn_docx.setStyleSheet(
+            f"background:{_PALETTE['bg_input']};color:{_PALETTE['text_primary']};"
+            f"border:1px solid {_PALETTE['border']};border-radius:8px;"
+            f"padding:8px 10px;"
+        )
+
+        btn_pdf = QPushButton("⬇  PDF (.pdf)")
         btn_pdf.setObjectName("btnPdf")
         btn_pdf.setMinimumHeight(38)
         btn_pdf.clicked.connect(self.pdf_requested.emit)
         btn_pdf.setStyleSheet(
             f"background:{_PALETTE['bg_input']};color:{_PALETTE['text_primary']};"
             f"border:1px solid {_PALETTE['border']};border-radius:8px;"
-            f"padding:8px 20px;"
+            f"padding:8px 10px;"
         )
 
-        action_row.addWidget(btn_apply, stretch=1)
+        action_row.addWidget(btn_apply, stretch=2)
+        action_row.addWidget(btn_docx, stretch=1)
         action_row.addWidget(btn_pdf, stretch=1)
 
         lay.addLayout(input_row)
@@ -475,22 +488,24 @@ class ChatPanel(QFrame):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Preview Pane
+# Preview Pane (With In-App Editing Support)
 # ══════════════════════════════════════════════════════════════════════════════
 
 class PreviewPane(QFrame):
     """
-    Right pane: live Markdown → HTML résumé preview.
+    Right pane: live Markdown → HTML résumé preview with direct in-app editing mode.
 
-    Public API
-    ──────────
-    load_md(markdown_text: str)   – re-render from raw Markdown
-    load_html(html: str)          – inject pre-rendered HTML directly
+    Signals
+    ───────
+    resume_edited(str) – emitted when user saves manual edits in the editor
     """
+
+    resume_edited = pyqtSignal(str)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setObjectName("panel")
+        self._current_md: str = _PLACEHOLDER_MD
         self._setup_ui()
         self.load_md(_PLACEHOLDER_MD)
 
@@ -503,12 +518,25 @@ class PreviewPane(QFrame):
         header = QWidget()
         header.setStyleSheet(f"background:{_PALETTE['bg_panel']};")
         h_lay = QHBoxLayout(header)
-        h_lay.setContentsMargins(16, 12, 16, 12)
+        h_lay.setContentsMargins(16, 10, 16, 10)
+        h_lay.setSpacing(12)
+
         title = QLabel("📄  Résumé Preview")
         title.setStyleSheet("font-size: 15px; font-weight: 700;")
+
+        self.btn_edit_toggle = QPushButton("✏️  Edit Résumé")
+        self.btn_edit_toggle.setStyleSheet(
+            f"background:{_PALETTE['bg_input']}; color:{_PALETTE['accent']};"
+            f"border:1px solid {_PALETTE['border']}; border-radius:6px;"
+            f"padding:5px 12px; font-size:11px; font-weight:600;"
+        )
+        self.btn_edit_toggle.clicked.connect(self._toggle_edit_mode)
+
         self._company_lbl = QLabel("")
         self._company_lbl.setStyleSheet(f"color:{_PALETTE['accent']}; font-size:12px;")
+
         h_lay.addWidget(title)
+        h_lay.addWidget(self.btn_edit_toggle)
         h_lay.addStretch()
         h_lay.addWidget(self._company_lbl)
         root.addWidget(header)
@@ -518,16 +546,89 @@ class PreviewPane(QFrame):
         divider.setStyleSheet(f"border-top: 1px solid {_PALETTE['border']};")
         root.addWidget(divider)
 
-        # HTML browser
+        # Stacked Widget (Page 0 = HTML Preview, Page 1 = In-App Editor)
+        self._stack = QStackedWidget()
+
+        # Page 0: HTML Browser
         self._browser = QTextBrowser()
         self._browser.setObjectName("preview")
         self._browser.setOpenExternalLinks(False)
-        root.addWidget(self._browser, stretch=1)
+        self._stack.addWidget(self._browser)
+
+        # Page 1: Editor container
+        edit_container = QWidget()
+        edit_lay = QVBoxLayout(edit_container)
+        edit_lay.setContentsMargins(16, 14, 16, 14)
+        edit_lay.setSpacing(10)
+
+        edit_hint = QLabel("💡 <b>Direct Edit Mode:</b> Edit your résumé text, bullets, or skills below, then click <b>Apply Changes</b>.")
+        edit_hint.setStyleSheet(f"color:{_PALETTE['text_muted']}; font-size:11px;")
+        edit_lay.addWidget(edit_hint)
+
+        self._editor = QTextEdit()
+        self._editor.setStyleSheet(
+            f"background:{_PALETTE['bg_input']}; color:{_PALETTE['text_primary']};"
+            f"border:1px solid {_PALETTE['border']}; border-radius:8px;"
+            f"font-family:'Consolas', 'Courier New', monospace; font-size:13px; line-height:1.5;"
+        )
+        edit_lay.addWidget(self._editor, stretch=1)
+
+        # Editor action toolbar
+        edit_actions = QHBoxLayout()
+        edit_actions.addStretch()
+
+        btn_cancel_edit = QPushButton("Cancel")
+        btn_cancel_edit.setStyleSheet(
+            f"background:{_PALETTE['bg_input']}; color:{_PALETTE['text_primary']};"
+            f"border:1px solid {_PALETTE['border']}; border-radius:6px; padding:6px 14px;"
+        )
+        btn_cancel_edit.clicked.connect(self._cancel_edit)
+
+        btn_save_edit = QPushButton("💾  Apply Changes")
+        btn_save_edit.setStyleSheet(
+            f"background:{_PALETTE['success']}; color:#fff;"
+            f"border:none; border-radius:6px; padding:6px 18px; font-weight:600;"
+        )
+        btn_save_edit.clicked.connect(self._save_edit)
+
+        edit_actions.addWidget(btn_cancel_edit)
+        edit_actions.addWidget(btn_save_edit)
+        edit_lay.addLayout(edit_actions)
+
+        self._stack.addWidget(edit_container)
+        root.addWidget(self._stack, stretch=1)
+
+    # ── Edit Mode Logic ───────────────────────────────────────────────────────
+
+    def _toggle_edit_mode(self) -> None:
+        if self._stack.currentIndex() == 0:
+            # Enter edit mode
+            self._editor.setPlainText(self._current_md)
+            self._stack.setCurrentIndex(1)
+            self.btn_edit_toggle.setText("👁️  Preview Mode")
+        else:
+            # Exit edit mode back to preview
+            self._stack.setCurrentIndex(0)
+            self.btn_edit_toggle.setText("✏️  Edit Résumé")
+
+    def _cancel_edit(self) -> None:
+        self._stack.setCurrentIndex(0)
+        self.btn_edit_toggle.setText("✏️  Edit Résumé")
+
+    def _save_edit(self) -> None:
+        new_md = self._editor.toPlainText().strip()
+        if new_md:
+            self._current_md = new_md
+            self.load_md(new_md)
+            self.resume_edited.emit(new_md)
+        self._stack.setCurrentIndex(0)
+        self.btn_edit_toggle.setText("✏️  Edit Résumé")
 
     # ── Public API ────────────────────────────────────────────────────────────
 
     @pyqtSlot(str)
     def load_md(self, md_text: str) -> None:
+        self._current_md = md_text
         body = markdown.markdown(
             md_text,
             extensions=["extra", "codehilite", "nl2br"],
@@ -542,6 +643,9 @@ class PreviewPane(QFrame):
     def set_company(self, company: str, role: str) -> None:
         self._company_lbl.setText(f"{company}  •  {role}")
 
+    def get_markdown(self) -> str:
+        return self._current_md
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Main Window
@@ -549,6 +653,8 @@ class PreviewPane(QFrame):
 
 class _MainWindow(QMainWindow):
     """Frameless transparent overlay window."""
+
+    profile_updated = pyqtSignal()
 
     def __init__(self) -> None:
         super().__init__()
@@ -645,11 +751,29 @@ class _MainWindow(QMainWindow):
         btn_close    = _ctrl_btn("✕", _PALETTE["danger"],  self.close)
         btn_minimise = _ctrl_btn("−", _PALETTE["warning"], self.showMinimized)
 
+        btn_profile = QPushButton("⚙️  My Profile & Projects")
+        btn_profile.setStyleSheet(
+            f"background:{_PALETTE['bg_input']}; color:{_PALETTE['accent']};"
+            f"border:1px solid {_PALETTE['border']}; border-radius:6px;"
+            f"padding:4px 12px; font-size:11px; font-weight:600;"
+        )
+        btn_profile.clicked.connect(self._open_profile_dialog)
+
         lay.addWidget(logo)
+        lay.addWidget(btn_profile)
         lay.addWidget(self._drag_lbl, stretch=1)
         lay.addWidget(btn_minimise)
         lay.addWidget(btn_close)
         return bar
+
+    def _open_profile_dialog(self) -> None:
+        try:
+            from profile_editor import ProfileEditorDialog
+            dlg = ProfileEditorDialog(parent=self)
+            dlg.data_saved.connect(self.profile_updated.emit)
+            dlg.exec()
+        except Exception as e:
+            print(f"Error opening profile editor: {e}")
 
     # ── Drag-to-move ──────────────────────────────────────────────────────────
 
@@ -728,6 +852,22 @@ class RoleSyncApp:
     def approved_signal(self):
         """pyqtSignal – connect auto_submit.py here."""
         return self._window.chat_panel.approved
+
+    @property
+    def pdf_requested_signal(self):
+        return self._window.chat_panel.pdf_requested
+
+    @property
+    def docx_requested_signal(self):
+        return self._window.chat_panel.docx_requested
+
+    @property
+    def resume_edited_signal(self):
+        return self._window.preview_pane.resume_edited
+
+    @property
+    def profile_updated_signal(self):
+        return self._window.profile_updated
 
     # ── Lifecycle ─────────────────────────────────────────────────────────────
 
