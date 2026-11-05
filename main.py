@@ -509,19 +509,38 @@ class RoleSyncOrchestrator:
                 logger.error("Failed recompiling edited docx: %s", err)
 
     def _on_profile_updated(self) -> None:
-        """Triggered when user edits and saves profile in the ProfileEditorDialog."""
-        logger.info("Candidate profile and portfolio updated from dialog.")
+        """Triggered when user edits and saves profile or imports a master resume file."""
+        logger.info("Candidate profile and portfolio updated.")
         self.candidate = load_candidate_profile()
         try:
-            self.rag = RAGEngine()
+            if hasattr(self, "rag") and self.rag:
+                self.rag.reload_portfolio()
+            else:
+                self.rag = RAGEngine()
         except Exception as e:
             logger.warning("RAG reload warning: %s", e)
-        self.bridge.sig_chat_push.emit(
-            f"👤 <b>Candidate Profile Updated!</b><br>"
-            f"Active candidate: <b>{self.candidate.name}</b> ({self.candidate.email})<br>"
-            f"Portfolio data refreshed for future job matching.",
-            "system"
-        )
+
+        # Check if master resume was ingested
+        prof_dict = {}
+        try:
+            prof_dict = json.loads(pathlib.Path("profile.json").read_text(encoding="utf-8"))
+        except Exception:
+            pass
+        resume_name = prof_dict.get("master_resume_filename")
+        if resume_name:
+            self.bridge.sig_chat_push.emit(
+                f"📄 <b>Ground-Truth Master Résumé Active:</b> <code>{resume_name}</code><br>"
+                f"Candidate: <b>{self.candidate.name}</b> ({self.candidate.email})<br>"
+                "Vector database re-indexed. All future job applications will be tailored directly from your real experience!",
+                "system"
+            )
+        else:
+            self.bridge.sig_chat_push.emit(
+                f"👤 <b>Candidate Profile Updated!</b><br>"
+                f"Active candidate: <b>{self.candidate.name}</b> ({self.candidate.email})<br>"
+                f"Portfolio data refreshed for future job matching.",
+                "system"
+            )
 
     def _on_user_chat_message(self, message: str) -> None:
         """Triggered when user sends a chat message. Revises the résumé based on user's feedback."""
