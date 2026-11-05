@@ -15,6 +15,7 @@ FILES = [
     "f:/agent/auto_submit.py",
     "f:/agent/lifecycle_watchdog.py",
     "f:/agent/main.py",
+    "f:/agent/resume_parser.py",
     "f:/agent/master_portfolio.json",
     "f:/agent/profile.json",
 ]
