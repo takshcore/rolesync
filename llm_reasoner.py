@@ -550,13 +550,30 @@ def extract_jd_metadata_local(job_description: str, rag_context: str = "") -> Re
             if d not in ats_keywords:
                 ats_keywords.append(d)
 
-    bullets = [
-        f"Applied core software engineering principles to design, develop, and test robust software solutions aligned with {company}'s standards.",
-        "Participated actively in cross-functional code reviews and engineering sprints, improving code maintainability and test coverage.",
-        "Collaborated with senior engineers to architect high-performance, modular components leveraging modern programming practices.",
-        "Engaged in rapid prototyping and testing of real-world features, ensuring compliance with strict software quality metrics.",
-        "Synthesized technical feedback into actionable engineering improvements, accelerating delivery across integration pipelines."
-    ]
+    # Extract candidate's real evidence from the portfolio RAG context
+    real_bullets = []
+    if rag_context:
+        for r_line in rag_context.splitlines():
+            r_str = r_line.strip()
+            if r_str.startswith(("-", "•", "*")) and len(r_str) > 20:
+                clean_r = r_str.lstrip("-•* ").strip()
+                if clean_r not in real_bullets:
+                    real_bullets.append(clean_r)
+
+    if real_bullets:
+        bullets = []
+        for b in real_bullets[:5]:
+            bullets.append(b)
+        if len(bullets) < 4:
+            bullets.append(f"Applied core engineering principles to build and deliver reliable software solutions aligned with {company}'s requirements.")
+    else:
+        bullets = [
+            f"Applied core software engineering principles to design, develop, and test robust software solutions aligned with {company}'s standards.",
+            "Participated actively in cross-functional code reviews and engineering sprints, improving code maintainability and test coverage.",
+            "Collaborated with senior engineers to architect high-performance, modular components leveraging modern programming practices.",
+            "Engaged in rapid prototyping and testing of real-world features, ensuring compliance with strict software quality metrics.",
+            "Synthesized technical feedback into actionable engineering improvements, accelerating delivery across integration pipelines."
+        ]
 
     return ReasonerOutput(
         company=company,
