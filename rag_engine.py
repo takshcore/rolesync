@@ -350,6 +350,11 @@ class RAGEngine:
         # duplicates; it just refreshes vectors if a project document changed.
         self._upsert_portfolio()
 
+    @property
+    def collection(self):
+        """Public alias for internal ChromaDB collection."""
+        return self._collection
+
     # ── Internal helpers ───────────────────────────────────────────────────────
 
     def _upsert_portfolio(self) -> None:
@@ -547,37 +552,42 @@ class RAGEngine:
         ]
 
         for rank, match in enumerate(matches, start=1):
-            project: dict[str, Any] = match["project"]  # Full portfolio entry
-            dist: float = match["distance"]              # Cosine distance score
+            project: dict[str, Any] = match.get("project") or {}
+            dist: float = match.get("distance", 0.0)
+
+            proj_name: str = project.get("name") or match.get("name") or match.get("id") or f"Project {rank}"
 
             # Section header with rank and distance for the LLM's reference.
-            lines.append(f"### {rank}. {project['name']} *(similarity distance: {dist:.4f})*")
+            lines.append(f"### {rank}. {proj_name} *(similarity distance: {dist:.4f})*")
 
             # Domain line — helps the LLM understand the technical context.
-            lines.append(f"**Domain:** {project.get('domain', 'N/A')}")
+            domain_val = project.get("domain") or match.get("metadata", {}).get("domain", "N/A")
+            lines.append(f"**Domain:** {domain_val}")
 
             # Tech stack on one line — directly addressable in cover letters.
-            tech_str: str = ", ".join(project.get("tech_stack", []))
-            lines.append(f"**Tech Stack:** {tech_str}")
+            tech = project.get("tech_stack") or match.get("metadata", {}).get("tech_stack", [])
+            tech_str: str = ", ".join(tech) if isinstance(tech, list) else str(tech)
+            lines.append(f"**Tech Stack:** {tech_str or 'N/A'}")
 
             # Tagline — a one-sentence description safe to quote in applications.
             lines.append(f"**Tagline:** {project.get('tagline', '')}")
 
             # Role — important for demonstrating individual contribution level.
-            lines.append(f"**Role:** {project.get('role', 'N/A')}")
+            lines.append(f"**Role:** {project.get('role', 'Software Developer')}")
 
-            # Highlights — the most compelling evidence; each is a quantified
-            # achievement that can be mapped directly to job requirements.
-            lines.append("**Key Highlights:**")
-            for highlight in project.get("highlights", []):
-                # Wrap long highlights at 100 chars with hanging indent so the
-                # LLM's context window is used efficiently.
-                wrapped: str = textwrap.fill(
-                    f"- {highlight}",
-                    width=100,
-                    subsequent_indent="  ",  # Hanging indent for wrapped lines
-                )
-                lines.append(wrapped)
+            # Highlights — the most compelling evidence
+            highlights = project.get("highlights", [])
+            if highlights:
+                lines.append("**Key Highlights:**")
+                for highlight in highlights:
+                    wrapped: str = textwrap.fill(
+                        f"- {highlight}",
+                        width=100,
+                        subsequent_indent="  ",
+                    )
+                    lines.append(wrapped)
+            elif match.get("document"):
+                lines.append(f"**Summary:** {match['document'][:200]}...")
 
             lines.append("")  # Blank line between projects for visual separation
 
