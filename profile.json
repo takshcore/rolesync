@@ -1,9 +1,15 @@
 {
-  "name": "Alex Mercer",
-  "email": "alex.mercer.dev@gmail.com",
-  "phone": "+1-555-019-2834",
-  "linkedin": "https://linkedin.com/in/alexmercer-dev",
+  "name": "Takshraj Saraf",
+  "email": "saraftaksh@gmail.com",
+  "phone": "+91 9981893174",
+  "linkedin": "https://linkedin.com/in/takshraj-saraf-7b8305307",
   "github": "https://github.com/takshcore",
-  "location": "San Francisco, CA (Open to Remote)",
-  "years_exp": 6
+  "location": "Jabalpur, Madhya Pradesh",
+  "years_exp": 6,
+  "master_resume_path": "vault/master_resume/master_resume.pdf",
+  "master_resume_filename": "Takshraj Saraf Resume (1).pdf",
+  "summary": "B.Tech student in Computer Science & Business Systems specializing in Agentic AI, Generative AI,\nand Python backend architecture. Experienced in developing autonomous AI workflows, LLM-driven\npipelines, and real-time Python applications. Driven by a continuous learning mindset to optimize\ncompute efficiency and build scalable AI solutions.",
+  "education": "Shri Ram Institute of Technology Jabalpur, MP\nBachelor of Technology (B.Tech) Computer Science & Business\nSystems\nExpected Graduation:\n2027\nCGPA: 8.0/10.0\nRelevant Coursework: Data Structures & Algorithms, Operating Systems, DBMS, Computer\nOrganization & Architecture.",
+  "skills_raw": "Programming: Python, C, C++\nAI & Data: Agentic AI Frameworks, Generative AI, Machine Learning Pipelines, LLM\nIntegration, Data Preprocessing\nTechnologies & Tools: Flask, PyQt6, WebSockets, WebRTC, SQLite, Git",
+  "certifications": "72-Day Agentic AI & Python Training (Learnijoy): Intensive program focused on building\nautonomous AI agents, Python backend integration, and practical dynamic workflows.\nCisco Networking Academy: Coursework completed in Modern AI, Python Essentials, and\nCybersecurity."
 }
