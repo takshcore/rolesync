@@ -137,6 +137,10 @@ class CandidateProfile:
     github: str                          # GitHub URL or username
     location: str                        # Geographic location string
     years_exp: int = 0                   # Years of experience (default 0)
+    summary: str = ""                    # Candidate's original summary
+    education: str = ""                  # Candidate's real education
+    skills_raw: str = ""                 # Candidate's real technical skills
+    certifications: str = ""             # Candidate's real certifications
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -295,6 +299,18 @@ class DocCompiler:
         """
         logger.info("Compiling résumé for %s @ %s", candidate.name, _field(output, "company"))
 
+        # Build the output filename deterministically so collisions are
+        # impossible and files sort cleanly by company + date.
+        company_tok = _sanitise(_field(output, "company", "Company"))  # Safe company name
+        role_tok = _sanitise(_field(output, "role", "Role"))           # Safe role name
+        date_tok = datetime.date.today().strftime("%Y%m%d")            # YYYYMMDD stamp
+        filename = f"{company_tok}_{role_tok}_{date_tok}.docx"         # Final filename
+        out_path = self.output_dir / filename                           # Full destination path
+
+        # If candidate has uploaded master resume reference data, build tailored document matching reference template
+        if candidate.education or candidate.skills_raw or candidate.certifications:
+            return self._compile_from_reference_template(candidate, output, out_path)
+
         # Open the template each time we compile so every résumé starts from
         # the same clean slate; python-docx loads it fully into memory.
         doc: Document = Document(str(self.template_path))
@@ -306,17 +322,163 @@ class DocCompiler:
         self._inject_bullets(doc, output)              # Experience achievements
         self._inject_skills(doc, output)               # ATS keyword line
 
-        # Build the output filename deterministically so collisions are
-        # impossible and files sort cleanly by company + date.
-        company_tok = _sanitise(_field(output, "company", "Company"))  # Safe company name
-        role_tok = _sanitise(_field(output, "role", "Role"))           # Safe role name
-        date_tok = datetime.date.today().strftime("%Y%m%d")            # YYYYMMDD stamp
-        filename = f"{company_tok}_{role_tok}_{date_tok}.docx"         # Final filename
-        out_path = self.output_dir / filename                           # Full destination path
-
         doc.save(str(out_path))   # Persist the document; str() needed on older python-docx
         logger.info("Résumé saved → %s", out_path.resolve())
         return out_path.resolve()  # Return absolute path for the caller
+
+    def _compile_from_reference_template(
+        self,
+        candidate: CandidateProfile,
+        output: Any,
+        out_path: pathlib.Path,
+    ) -> pathlib.Path:
+        """
+        Compile a tailored ATS-compliant résumé using the candidate's uploaded
+        resume as the visual template and reference.
+        """
+        doc = Document()
+
+        # Margins: 0.75 in (standard ATS professional format)
+        for section in doc.sections:
+            section.top_margin = Inches(0.75)
+            section.bottom_margin = Inches(0.75)
+            section.left_margin = Inches(0.75)
+            section.right_margin = Inches(0.75)
+
+        style = doc.styles["Normal"]
+        font = style.font
+        font.name = "Calibri"
+        font.size = Pt(10)
+
+        # ── 1. Header (Name, Contact, Links) ──────────────────────────────────
+        p_name = doc.add_paragraph()
+        p_name.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p_name.paragraph_format.space_after = Pt(2)
+        r_name = p_name.add_run(candidate.name.upper())
+        r_name.bold = True
+        r_name.font.size = Pt(16)
+        r_name.font.color.rgb = RGBColor(0x11, 0x18, 0x27)
+
+        # Contact line: Location | Email | Phone
+        contact_items = []
+        if candidate.location:
+            contact_items.append(candidate.location)
+        if candidate.email:
+            contact_items.append(candidate.email)
+        if candidate.phone:
+            contact_items.append(candidate.phone)
+
+        p_contact = doc.add_paragraph()
+        p_contact.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p_contact.paragraph_format.space_after = Pt(2)
+        r_contact = p_contact.add_run(" | ".join(contact_items))
+        r_contact.font.size = Pt(9.5)
+
+        # Profile Links
+        link_items = []
+        if candidate.linkedin:
+            clean_li = candidate.linkedin.replace("https://", "").replace("http://", "")
+            link_items.append(clean_li)
+        if candidate.github:
+            clean_gh = candidate.github.replace("https://", "").replace("http://", "")
+            link_items.append(clean_gh)
+
+        if link_items:
+            p_links = doc.add_paragraph()
+            p_links.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            p_links.paragraph_format.space_after = Pt(6)
+            r_links = p_links.add_run(" | ".join(link_items))
+            r_links.font.size = Pt(9.5)
+            _add_bottom_border(p_links)
+
+        # Heading builder
+        def add_section_header(title: str):
+            h = doc.add_paragraph()
+            h.paragraph_format.space_before = Pt(8)
+            h.paragraph_format.space_after = Pt(3)
+            r = h.add_run(title.upper())
+            r.bold = True
+            r.font.size = Pt(11)
+            r.font.color.rgb = RGBColor(0x1F, 0x29, 0x37)
+            _add_bottom_border(h)
+            return h
+
+        company = _field(output, "company", "Target Company")
+        role = _field(output, "role", "Software Engineer")
+
+        # ── 2. Professional Summary ───────────────────────────────────────────
+        add_section_header("Professional Summary")
+        summary_text = _field(output, "summary", "")
+        if not summary_text:
+            if candidate.summary:
+                summary_text = candidate.summary.replace("\n", " ").strip()
+            else:
+                summary_text = f"Proactive software engineering candidate with strong foundations in software architecture and modern programming principles, eager to contribute as an {role} at {company}."
+        p_sum = doc.add_paragraph()
+        p_sum.paragraph_format.space_after = Pt(4)
+        r_sum = p_sum.add_run(summary_text)
+        r_sum.font.size = Pt(10)
+
+        # ── 3. Education ──────────────────────────────────────────────────────
+        if candidate.education:
+            add_section_header("Education")
+            for edu_line in candidate.education.splitlines():
+                if edu_line.strip():
+                    p_edu = doc.add_paragraph()
+                    p_edu.paragraph_format.space_after = Pt(2)
+                    r_edu = p_edu.add_run(edu_line.strip())
+                    r_edu.font.size = Pt(10)
+
+        # ── 4. Technical Skills ───────────────────────────────────────────────
+        add_section_header("Technical Skills")
+        if candidate.skills_raw:
+            for s_line in candidate.skills_raw.splitlines():
+                if s_line.strip():
+                    p_sk = doc.add_paragraph()
+                    p_sk.paragraph_format.space_after = Pt(2)
+                    if ":" in s_line:
+                        cat, vals = s_line.split(":", 1)
+                        r_cat = p_sk.add_run(cat.strip() + ": ")
+                        r_cat.bold = True
+                        r_cat.font.size = Pt(10)
+                        r_val = p_sk.add_run(vals.strip())
+                        r_val.font.size = Pt(10)
+                    else:
+                        r_sk = p_sk.add_run(s_line.strip())
+                        r_sk.font.size = Pt(10)
+
+        ats_keywords = _field(output, "ats_keywords", [])
+        if ats_keywords:
+            p_ats = doc.add_paragraph()
+            p_ats.paragraph_format.space_after = Pt(4)
+            r_ats_lbl = p_ats.add_run("Target ATS Alignment: ")
+            r_ats_lbl.bold = True
+            r_ats_lbl.font.size = Pt(10)
+            r_ats_val = p_ats.add_run(", ".join(ats_keywords))
+            r_ats_val.font.size = Pt(10)
+
+        # ── 5. Technical Projects & Experience ────────────────────────────────
+        add_section_header("Technical Projects & Experience")
+        bullets = _field(output, "tailored_bullets", [])
+        for b in bullets:
+            p_b = doc.add_paragraph(style="List Bullet")
+            p_b.paragraph_format.space_after = Pt(2)
+            r_b = p_b.add_run(b)
+            r_b.font.size = Pt(10)
+
+        # ── 6. Certifications & Training ──────────────────────────────────────
+        if candidate.certifications:
+            add_section_header("Certifications & Training")
+            for c_line in candidate.certifications.splitlines():
+                if c_line.strip():
+                    p_c = doc.add_paragraph(style="List Bullet")
+                    p_c.paragraph_format.space_after = Pt(2)
+                    r_c = p_c.add_run(c_line.strip())
+                    r_c.font.size = Pt(10)
+
+        doc.save(str(out_path))
+        logger.info("Reference-mode résumé successfully compiled → %s", out_path.resolve())
+        return out_path.resolve()
 
     def export_pdf(self, docx_path: pathlib.Path) -> pathlib.Path:
         """
