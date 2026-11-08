@@ -193,7 +193,7 @@ def load_portfolio(path: str = PORTFOLIO_PATH) -> list[dict[str, Any]]:
         # FileNotFoundError with a cryptic trace.
         raise FileNotFoundError(
             f"Portfolio file not found at: {path}\n"
-            "Please make sure master_portfolio.json exists in f:/agent/"
+            "Please make sure master_portfolio.json exists in the project root."
         )
 
     # Open with explicit UTF-8 so accented characters in project names survive
@@ -317,6 +317,7 @@ class RAGEngine:
         """
         # ── Step 1: Load the portfolio from disk ─────────────────────────────
         # This is the single source of truth; all other state derives from it.
+        self.portfolio_path: str = portfolio_path
         self.portfolio: list[dict[str, Any]] = load_portfolio(portfolio_path)
 
         # ── Step 2: Instantiate the embedder ─────────────────────────────────
