@@ -1,106 +1,165 @@
 {
   "projects": [
     {
-      "id": "synapse",
-      "name": "Synapse",
-      "tagline": "Real-time collaborative whiteboard with live multiplayer drawing and conferencing",
-      "description": "Synapse is a full-stack collaborative whiteboard application enabling multiple users to draw, annotate, and communicate simultaneously. Built with PyQt6 for the native desktop UI, WebRTC for peer-to-peer media and data channels, and Python asyncio for the non-blocking signalling server. Features include infinite canvas, vector shape tools, sticky notes, voice/video chat, session recording, and end-to-end encrypted room codes.",
-      "tech_stack": ["PyQt6", "WebRTC", "asyncio", "aiohttp", "SQLite", "Python"],
-      "domain": "Desktop Application, Real-Time Systems, Networking",
-      "highlights": [
-        "Engineered a custom asyncio signalling server handling 500+ concurrent WebSocket connections",
-        "Implemented CRDT-based conflict resolution so concurrent edits never corrupt the shared canvas state",
-        "Reduced UI render latency to <16 ms by offloading canvas compositing to a QOpenGLWidget",
-        "Packaged as a single-file executable with PyInstaller for Windows, macOS, and Linux"
+      "id": "experience_project_1",
+      "name": "Experience / Project 1",
+      "tagline": "Experience with Python",
+      "description": "B.Tech student in Computer Science & Business Systems specializing in Agentic AI, Generative AI,",
+      "tech_stack": [
+        "Python"
       ],
-      "role": "Solo developer – architecture, backend, frontend, DevOps",
+      "domain": "Software Engineering & Systems Development",
+      "highlights": [
+        "and Python backend architecture. Experienced in developing autonomous AI workflows, LLM-driven",
+        "pipelines, and real-time Python applications. Driven by a continuous learning mindset to optimize",
+        "compute efficiency and build scalable AI solutions."
+      ],
+      "role": "Software Developer / Engineer",
       "year": 2024,
-      "keywords": ["PyQt6", "WebRTC", "asyncio", "real-time", "collaborative", "desktop", "websocket", "CRDT", "aiohttp", "GUI", "concurrent"]
+      "keywords": [
+        "Python",
+        "software",
+        "engineering",
+        "development",
+        "architecture"
+      ]
     },
     {
-      "id": "cattle_classify",
-      "name": "Cattle Classify",
-      "tagline": "Transfer-learning CNN that identifies cattle breeds from farm photographs",
-      "description": "A 48-hour hackathon project that fine-tunes a ResNet50 backbone (pre-trained on ImageNet) to classify 14 cattle breeds from real-world farm photos. The pipeline covers data augmentation (random crop, flip, colour jitter), class-imbalance handling via weighted sampling, mixed-precision training with PyTorch AMP, and a lightweight FastAPI inference endpoint. Final accuracy of 91.3 % on a held-out test set beat the baseline VGG16 model by 7 pp.",
-      "tech_stack": ["PyTorch", "ResNet50", "FastAPI", "NumPy", "Albumentations", "Weights & Biases", "Docker"],
-      "domain": "Computer Vision, Machine Learning, Transfer Learning",
-      "highlights": [
-        "Achieved 91.3 % top-1 accuracy by unfreezing only the last two ResNet50 residual blocks",
-        "Used Albumentations for 12-transform augmentation pipeline, cutting overfitting from 18 % to 4 %",
-        "Tracked 60+ experiments in Weights & Biases; identified optimal LR=3e-4 via sweep",
-        "Containerised inference server with Docker; cold-start latency under 400 ms on CPU"
+      "id": "cgpa_8_0_10_0",
+      "name": "CGPA: 8.0/10.0",
+      "tagline": "Software development and engineering experience",
+      "description": "Relevant Coursework: Data Structures & Algorithms, Operating Systems, DBMS, Computer",
+      "tech_stack": [
+        "Python",
+        "Software Engineering"
       ],
-      "role": "ML lead in a 3-person team",
-      "year": 2023,
-      "keywords": ["ResNet50", "transfer learning", "PyTorch", "computer vision", "image classification", "CNN", "deep learning", "hackathon", "FastAPI", "Docker", "augmentation"]
-    },
-    {
-      "id": "pulse_api",
-      "name": "PulseAPI",
-      "tagline": "High-throughput FastAPI microservice with Redis caching, JWT auth, and observability",
-      "description": "PulseAPI is a production-grade REST microservice template providing user authentication, rate limiting, and a pluggable business-logic layer. JWT access/refresh token pairs are issued at login; short-lived access tokens are validated in a dependency-injected middleware. Redis is used for distributed rate-limit counters and a read-through response cache that cuts database load by ~70 %. Prometheus metrics and Grafana dashboards expose p50/p95/p99 latencies in real time.",
-      "tech_stack": ["FastAPI", "Redis", "JWT", "PostgreSQL", "SQLAlchemy", "Alembic", "Prometheus", "Grafana", "Docker Compose"],
-      "domain": "Backend Engineering, Microservices, Security",
+      "domain": "Software Engineering & Systems Development",
       "highlights": [
-        "Sustained 8 000 req/s on a 4-core machine using async SQLAlchemy and connection pooling",
-        "Redis cache cut average response time from 42 ms to 6 ms for read-heavy endpoints",
-        "Zero-downtime migrations via Alembic with blue-green deployment strategy",
-        "100 % test coverage on auth flows; fuzz-tested JWT edge cases with Hypothesis"
+        "Organization & Architecture."
       ],
-      "role": "Backend engineer and architect",
+      "role": "Software Developer / Engineer",
       "year": 2024,
-      "keywords": ["FastAPI", "Redis", "JWT", "authentication", "microservice", "PostgreSQL", "SQLAlchemy", "REST API", "caching", "rate limiting", "async", "Python", "backend"]
+      "keywords": [
+        "software",
+        "engineering",
+        "development",
+        "architecture"
+      ]
     },
     {
-      "id": "dataweave",
-      "name": "DataWeave",
-      "tagline": "Petabyte-scale Apache Spark ETL pipeline orchestrated on AWS EMR",
-      "description": "DataWeave is an enterprise ETL solution that ingests raw clickstream events from S3, applies multi-stage Spark transformations (deduplication, sessionisation, schema enforcement, PII masking), and writes partitioned Parquet to a data lake consumed by Redshift. Apache Airflow DAGs orchestrate daily and hourly runs; SNS alerts fire on SLA breach. The pipeline processes 2 TB of raw JSON per day with a wall-clock time of 23 minutes end-to-end.",
-      "tech_stack": ["Apache Spark", "AWS EMR", "AWS S3", "AWS Redshift", "Apache Airflow", "PySpark", "Parquet", "SNS", "Terraform"],
-      "domain": "Data Engineering, Big Data, Cloud (AWS)",
-      "highlights": [
-        "Reduced daily ETL runtime from 4 h (legacy Hive) to 23 min via Spark adaptive query execution",
-        "PII masking stage achieves GDPR compliance without decrypting production data",
-        "Terraform modules provision a fresh EMR cluster per run, cutting idle cloud cost by 60 %",
-        "Backfill utility replays any date range idempotently using Airflow's catchup mechanism"
+      "id": "technologies_tools_flask_pyqt6_websockets_webrtc_sqlite_git",
+      "name": "Technologies & Tools: Flask, PyQt6, WebSockets, WebRTC, SQLite, Git",
+      "tagline": "Experience with Flask, PyQt6, SQLite",
+      "description": "AI & Data: Agentic AI Frameworks, Generative AI, Machine Learning Pipelines, LLM",
+      "tech_stack": [
+        "Flask",
+        "PyQt6",
+        "SQLite",
+        "Git",
+        "WebRTC"
       ],
-      "role": "Lead data engineer",
-      "year": 2023,
-      "keywords": ["Apache Spark", "PySpark", "AWS EMR", "S3", "ETL", "data pipeline", "big data", "Airflow", "Redshift", "Parquet", "data engineering", "cloud", "Terraform"]
-    },
-    {
-      "id": "neural_notes",
-      "name": "NeuralNotes",
-      "tagline": "LLM-powered study assistant that answers questions from your own uploaded notes",
-      "description": "NeuralNotes is a Retrieval-Augmented Generation (RAG) application that lets students upload lecture PDFs, slides, or plain-text notes and then chat with an AI that grounds every answer in the uploaded material. Documents are chunked, embedded with sentence-transformers, and stored in ChromaDB. At query time the top-k chunks are retrieved by cosine similarity and injected into a GPT-4o prompt, eliminating hallucinations about out-of-corpus content. A Streamlit frontend provides upload, chat, and citation-highlight UI.",
-      "tech_stack": ["LangChain", "ChromaDB", "OpenAI GPT-4o", "sentence-transformers", "Streamlit", "PyMuPDF", "Python"],
-      "domain": "LLM Applications, RAG, NLP, EdTech",
+      "domain": "Software Engineering & Systems Development",
       "highlights": [
-        "RAG pipeline reduced hallucination rate from 34 % (vanilla GPT) to <3 % on domain-specific Q&A",
-        "Chunking strategy (512-token overlapping windows) improved retrieval precision by 18 % vs naive split",
-        "LangChain conversation memory preserves multi-turn context without exceeding context windows",
-        "Deployed to Streamlit Cloud; 400+ active users in first month"
+        "AI & Data: Agentic AI Frameworks, Generative AI, Machine Learning Pipelines, LLM"
       ],
-      "role": "Full-stack developer and ML engineer",
+      "role": "Software Developer / Engineer",
       "year": 2024,
-      "keywords": ["LangChain", "ChromaDB", "RAG", "LLM", "GPT-4o", "sentence-transformers", "NLP", "embeddings", "vector database", "Streamlit", "OpenAI", "chatbot", "retrieval"]
+      "keywords": [
+        "Flask",
+        "PyQt6",
+        "SQLite",
+        "Git",
+        "WebRTC",
+        "software",
+        "engineering",
+        "development",
+        "architecture"
+      ]
     },
     {
-      "id": "shift_scheduler",
-      "name": "ShiftScheduler",
-      "tagline": "React + Django SaaS for automated workforce scheduling and time-off management",
-      "description": "ShiftScheduler is a multi-tenant SaaS application used by retail and hospitality businesses to auto-generate weekly staff rosters, manage shift swaps, and track attendance. The Django REST Framework backend exposes a versioned API consumed by a React + TypeScript SPA. A constraint-satisfaction solver (Google OR-Tools) generates optimal schedules respecting labour law rules, employee preferences, and business demand forecasts. Stripe handles subscription billing; SendGrid delivers shift notifications.",
-      "tech_stack": ["React", "TypeScript", "Django", "Django REST Framework", "OR-Tools", "PostgreSQL", "Celery", "Redis", "Stripe", "SendGrid", "AWS ECS"],
-      "domain": "Full-Stack Web, SaaS, Operations Research",
-      "highlights": [
-        "OR-Tools solver generates a 50-employee week roster in <2 s, replacing 3 hours of manual scheduling",
-        "Multi-tenancy via row-level PostgreSQL schemas; zero cross-tenant data leakage verified by penetration test",
-        "Celery beat triggers nightly demand-forecast re-runs; staffing cost reduced by 12 % for pilot clients",
-        "Achieved SOC 2 Type I compliance; Stripe integration processes $40 k MRR"
+      "id": "agentic_ai_workflow_assistant_python_agentic_ai_gen_ai",
+      "name": "Agentic AI Workflow Assistant Python, Agentic AI, Gen AI",
+      "tagline": "Experience with Python",
+      "description": "Engineered an automated job tracking tool and tailored resume customization assistant using",
+      "tech_stack": [
+        "Python"
       ],
-      "role": "Co-founder and lead engineer",
-      "year": 2023,
-      "keywords": ["React", "TypeScript", "Django", "REST API", "SaaS", "OR-Tools", "scheduling", "full-stack", "PostgreSQL", "Celery", "Redis", "Stripe", "AWS", "workforce management"]
+      "domain": "Software Engineering & Systems Development",
+      "highlights": [
+        "Agentic AI frameworks.",
+        "Developed backend workflows in Python to dynamically parse data, interface with LLMs, and",
+        "generate optimized application materials."
+      ],
+      "role": "Software Developer / Engineer",
+      "year": 2024,
+      "keywords": [
+        "Python",
+        "software",
+        "engineering",
+        "development",
+        "architecture"
+      ]
+    },
+    {
+      "id": "cattle_classify_smart_india_hackathon_2025_python_machine_learning",
+      "name": "Cattle Classify (Smart India Hackathon 2025) Python, Machine Learning",
+      "tagline": "Experience with Python, Flask, PyQt6",
+      "description": "Led a team to design a machine learning pipeline architecture for automated agricultural image",
+      "tech_stack": [
+        "Python",
+        "Flask",
+        "PyQt6",
+        "SQLite",
+        "WebRTC"
+      ],
+      "domain": "Software Engineering & Systems Development",
+      "highlights": [
+        "classification.",
+        "Engineered strict data preprocessing strategies to eliminate noise and utilized advanced model",
+        "evaluation metrics (Precision/Recall) to maximize compute efficiency.",
+        "Project Synapse (Real-Time Collaborative Whiteboard) Python, PyQt6, Flask, WebRTC",
+        "Designed a scalable desktop application featuring real-time drawing and peer-to-peer voice",
+        "communication.",
+        "Built the backend using PyQt6, Flask, and SQLite, implementing token-regulated WebSockets for",
+        "low-latency synchronization and WebRTC to eliminate central server media bottlenecks."
+      ],
+      "role": "Software Developer / Engineer",
+      "year": 2024,
+      "keywords": [
+        "Python",
+        "Flask",
+        "PyQt6",
+        "SQLite",
+        "WebRTC",
+        "software",
+        "engineering",
+        "development",
+        "architecture"
+      ]
+    },
+    {
+      "id": "certifications_training",
+      "name": "CERTIFICATIONS & TRAINING",
+      "tagline": "Experience with Python",
+      "description": "Day Agentic AI & Python Training (Learnijoy): Intensive program focused on building",
+      "tech_stack": [
+        "Python"
+      ],
+      "domain": "Software Engineering & Systems Development",
+      "highlights": [
+        "autonomous AI agents, Python backend integration, and practical dynamic workflows.",
+        "Cisco Networking Academy: Coursework completed in Modern AI, Python Essentials, and",
+        "Cybersecurity."
+      ],
+      "role": "Software Developer / Engineer",
+      "year": 2024,
+      "keywords": [
+        "Python",
+        "software",
+        "engineering",
+        "development",
+        "architecture"
+      ]
     }
   ]
 }
