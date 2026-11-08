@@ -486,25 +486,44 @@ def extract_jd_metadata_local(job_description: str, rag_context: str = "") -> Re
 
     # 1. Company Extraction
     company = "Not specified"
-    company_matches = re.findall(
-        r'(?:here\s+at|welcome\s+to|join|about)\s+([A-Z][a-zA-Z0-9&]+)',
-        text
-    )
-    if not company_matches:
+    comp_m = re.search(r'(?:Company|Employer|Organization|Hiring\s+Organization):\s*([^\n\r,]+)', text, re.IGNORECASE)
+    if comp_m:
+        cand_comp = comp_m.group(1).strip()
+        if 2 <= len(cand_comp) <= 50:
+            company = cand_comp
+
+    if company == "Not specified":
         company_matches = re.findall(
-            r'\bat\s+([A-Z][a-zA-Z0-9&]+)(?:\s*,|\s*\.|\s+we|\s+is|\s+our)',
+            r'(?:here\s+at|welcome\s+to|join|about)\s+([A-Z][a-zA-Z0-9&]+)',
             text
         )
-    if not company_matches:
-        m = re.search(r'^([A-Z][a-zA-Z0-9&]+)\s+(?:Careers|Jobs|is hiring)', text, re.MULTILINE)
-        if m:
-            company_matches = [m.group(1)]
+        if not company_matches:
+            company_matches = re.findall(
+                r'\bat\s+([A-Z][a-zA-Z0-9&]+)(?:\s*,|\s*\.|\s+we|\s+is|\s+our)',
+                text
+            )
+        if not company_matches:
+            m = re.search(r'^([A-Z][a-zA-Z0-9&]+)\s+(?:Careers|Jobs|is hiring)', text, re.MULTILINE)
+            if m:
+                company_matches = [m.group(1)]
 
-    if company_matches:
-        false_positives = {"The", "This", "Our", "We", "You", "Your", "In", "As", "At", "Work"}
-        filtered = [c for c in company_matches if c not in false_positives]
-        if filtered:
-            company = filtered[0]
+        if company_matches:
+            false_positives = {"The", "This", "Our", "We", "You", "Your", "In", "As", "At", "Work"}
+            filtered = [c for c in company_matches if c not in false_positives]
+            if filtered:
+                company = filtered[0]
+
+    # 1.5 Deadline Extraction
+    deadline = "Not specified"
+    dl_m = re.search(
+        r'(?:Deadline|Apply\s+by|Applications\s+close|Closing\s+date|Due\s+date):\s*([A-Za-z0-9\s,\-/]+?)(?:\.|\n|$)',
+        text,
+        re.IGNORECASE,
+    )
+    if dl_m:
+        dl_cand = dl_m.group(1).strip()
+        if 3 <= len(dl_cand) <= 40:
+            deadline = dl_cand
 
     # 2. Role Extraction
     role = "Software Engineer"
@@ -575,10 +594,13 @@ def extract_jd_metadata_local(job_description: str, rag_context: str = "") -> Re
             "Synthesized technical feedback into actionable engineering improvements, accelerating delivery across integration pipelines."
         ]
 
+    while len(bullets) < 5:
+        bullets.append(f"Collaborated with engineering teams to build modular, production-ready systems adhering to best practices.")
+
     return ReasonerOutput(
         company=company,
         role=role,
-        deadline="Not specified",
+        deadline=deadline,
         missing_skills=["Enterprise CI/CD Pipelines"],
         tailored_bullets=bullets,
         ats_keywords=ats_keywords,
