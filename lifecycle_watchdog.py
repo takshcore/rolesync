@@ -44,10 +44,12 @@ import logging       # structured logging so the daemon's heartbeat is auditable
 import pathlib       # Path objects are safer than raw strings for file operations
 import shutil        # high-level file copy/move used by ArchiveService
 import sqlite3       # built-in relational store; no extra install needed
+import subprocess    # used for Windows WinRT toast notification fallback
 import sys           # sys.argv for the CLI interface and sys.exit on fatal errors
 import threading     # daemon thread so Watchdog doesn't block the caller
 import time          # time.sleep in the daemon loop keeps CPU usage near zero
 from datetime import datetime, timezone  # deadline arithmetic needs tz-aware datetimes
+from typing import Optional               # type annotations
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Optional third-party imports — wrapped so the module loads even if absent
@@ -69,7 +71,8 @@ except ImportError:                                   # plyer absent; will fall 
 # ══════════════════════════════════════════════════════════════════════════════
 
 # Root vault directory where the SQLite DB and all archives live
-VAULT_DIR: pathlib.Path = pathlib.Path("f:/agent/vault")
+_BASE_DIR: pathlib.Path = pathlib.Path(__file__).resolve().parent
+VAULT_DIR: pathlib.Path = _BASE_DIR / "vault"
 
 # Canonical path to the SQLite database file
 DEFAULT_DB_PATH: pathlib.Path = VAULT_DIR / "rolesync.db"
@@ -125,6 +128,54 @@ CREATE TABLE IF NOT EXISTS jobs (
     archived_at     TEXT                                -- UTC timestamp set when job enters archive
 );
 """
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Helper: Deadline Parsing & Time Calculation
+# ══════════════════════════════════════════════════════════════════════════════
+def parse_deadline_info(deadline_str: str) -> tuple[Optional[datetime], str, bool]:
+    """
+    Parses deadline string and returns (parsed_datetime, friendly_status, is_urgent).
+    Supports multiple date formats: %Y-%m-%d, %Y/%m/%d, %d-%m-%Y, %b %d, %Y, etc.
+    """
+    if not deadline_str or deadline_str.strip().lower() in ("not specified", "none", "", "asap", "rolling"):
+        return None, "Not specified", False
+
+    clean_str = deadline_str.strip()
+    date_formats = [
+        "%Y-%m-%d",
+        "%Y/%m/%d",
+        "%d-%m-%Y",
+        "%d/%m/%Y",
+        "%b %d, %Y",
+        "%b %d %Y",
+        "%B %d, %Y",
+        "%B %d %Y",
+        "%Y-%m-%dT%H:%M:%S",
+    ]
+    parsed_dt = None
+    for fmt in date_formats:
+        try:
+            parsed_dt = datetime.strptime(clean_str, fmt).replace(tzinfo=timezone.utc)
+            break
+        except ValueError:
+            continue
+
+    if not parsed_dt:
+        return None, clean_str, False
+
+    now_utc = datetime.now(timezone.utc)
+    delta = parsed_dt - now_utc
+    hours_left = delta.total_seconds() / 3600
+    days_left = delta.total_seconds() / 86400
+
+    if hours_left <= 0:
+        return parsed_dt, "Expired", True
+    elif hours_left < 24:
+        return parsed_dt, f"{int(max(1, hours_left))}h left", True
+    elif hours_left < 48:
+        return parsed_dt, f"{int(hours_left)}h left", True
+    else:
+        return parsed_dt, f"{int(days_left)} days left", False
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -382,6 +433,22 @@ class JobDatabase:
             self._conn.commit()
             logger.info("Job id=%d archived to %s", job_id, archive_path)
 
+    def update_deadline(self, job_id: int, deadline: str) -> None:
+        """Update deadline and reset deadline_notified flag so new deadline can alert."""
+        sql = "UPDATE jobs SET deadline = ?, deadline_notified = 0 WHERE id = ?"
+        with self._lock:
+            self._conn.execute(sql, (deadline, job_id))
+            self._conn.commit()
+            logger.info("Job id=%d deadline updated → %s", job_id, deadline)
+
+    def update_deadline_by_company_role(self, company: str, role: str, deadline: str) -> None:
+        """Update deadline matching company and role, resetting notified flag."""
+        sql = "UPDATE jobs SET deadline = ?, deadline_notified = 0 WHERE company = ? AND role = ?"
+        with self._lock:
+            self._conn.execute(sql, (deadline, company, role))
+            self._conn.commit()
+            logger.info("Job %s @ %s deadline updated → %s", role, company, deadline)
+
     # ── Read operations ───────────────────────────────────────────────────────
 
     def get_pending_deadlines(self) -> list[dict]:
@@ -503,6 +570,23 @@ class NotificationService:
     or ``RuntimeError`` is caught and the stdout fallback activates.
     """
 
+    def send_daily_reminder(
+        self,
+        company: str,
+        role: str,
+        deadline: str,
+        days_or_hours_text: str = "",
+    ) -> None:
+        """
+        Dispatch a daily reminder notification to the user's device for an active job chat.
+        """
+        title = "📅 RoleSync Daily Reminder"
+        message = (
+            f"Daily Alert: {role} @ {company} — "
+            f"{days_or_hours_text or 'Action required'} | Deadline: {deadline}"
+        )
+        self._dispatch_device_notification(title, message)
+
     def send_deadline_alert(
         self,
         company: str,
@@ -512,65 +596,71 @@ class NotificationService:
     ) -> None:
         """
         Fire a desktop notification warning the user about an approaching deadline.
-
-        If ``plyer`` is unavailable or raises, the same information is printed
-        to stdout so it is captured by any terminal or log aggregator watching
-        the process.
-
-        Parameters
-        ----------
-        company : str
-            Name of the hiring company shown in the notification body.
-        role : str
-            Job title shown in the notification body.
-        deadline : str
-            Human-readable deadline string (e.g. ``"2026-11-30"``).
-        hours_remaining : float
-            Calculated hours until the deadline; shown in the message so the
-            user knows exactly how urgent the alert is.
-
-        Returns
-        -------
-        None
-
-        Raises
-        ------
-        None
-            All exceptions are caught internally; this method never propagates.
         """
-        # Build the notification body once so it is consistent between the
-        # plyer path and the stdout fallback path
-        title: str = "⏰ RoleSync Deadline Alert"
-        message: str = (
-            f"Apply to {role} at {company} — "         # concise action item
-            f"{hours_remaining:.0f}h left! "           # formatted to nearest hour for readability
-            f"Deadline: {deadline}"                    # repeat the date so user can act without opening the app
+        title = "⏰ RoleSync Deadline Alert"
+        message = (
+            f"Apply to {role} at {company} — "
+            f"{hours_remaining:.0f}h left! "
+            f"Deadline: {deadline}"
         )
+        self._dispatch_device_notification(title, message)
 
-        if _PLYER_AVAILABLE:
-            # Attempt the native OS notification first
+    def _dispatch_device_notification(self, title: str, message: str) -> None:
+        """
+        Multi-channel device notification dispatcher:
+        1. On Windows: Native Windows WinRT ToastNotification (Windows 10/11)
+        2. Cross-platform: Plyer notification
+        3. Formatted console block
+        """
+        dispatched = False
+
+        # 1. On Windows, WinRT Toast is modern, clean, and avoids Shell_NotifyIconW tray errors
+        if sys.platform == "win32":
+            dispatched = self._windows_winrt_toast(title, message)
+
+        # 2. Plyer fallback if not Windows or if WinRT failed
+        if not dispatched and _PLYER_AVAILABLE:
             try:
                 _plyer_notify.notify(
-                    title=title,                                   # bold heading in the toast
-                    message=message,                               # body text of the notification
-                    app_name="RoleSync",                           # identifies the sender in notification centre
-                    timeout=NOTIFICATION_TIMEOUT_SECONDS,          # auto-dismiss after 15 s
+                    title=title,
+                    message=message,
+                    app_name="RoleSync",
+                    timeout=NOTIFICATION_TIMEOUT_SECONDS,
                 )
-                logger.info("Desktop notification sent for %s @ %s", role, company)
-                return  # early return; stdout fallback not needed
-            except Exception as exc:            # catch-all: RuntimeError, dbus errors, etc.
-                logger.warning("plyer notification failed (%s); falling back to stdout", exc)
-                # fall through to stdout fallback below
+                logger.info("Plyer desktop notification sent: %s — %s", title, message)
+                dispatched = True
+            except Exception as exc:
+                logger.warning("plyer notification failed: %s", exc)
 
-        # Stdout fallback — always executes if plyer is absent or raised
-        # Print a visually distinct block so it isn't missed in log tails
-        print("", flush=True)                       # blank line to separate from previous output
-        print("╔══════════════════════════════════════╗", flush=True)
+        # 3. Formatted console block
+        print("", flush=True)
+        print("╔══════════════════════════════════════════════════════════════╗", flush=True)
         print(f"║  {title}", flush=True)
         print(f"║  {message}", flush=True)
-        print("╚══════════════════════════════════════╝", flush=True)
+        print("╚══════════════════════════════════════════════════════════════╝", flush=True)
         print("", flush=True)
-        logger.info("Stdout deadline alert printed for %s @ %s", role, company)
+        logger.info("Device alert recorded: %s — %s", title, message)
+
+    def _windows_winrt_toast(self, title: str, message: str) -> bool:
+        """Dispatch native Windows WinRT Toast notification via PowerShell."""
+        try:
+            t_clean = title.replace('"', '`"')
+            m_clean = message.replace('"', '`"')
+            ps_code = f'''
+            [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] > $null
+            $template = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02)
+            $textNodes = $template.GetElementsByTagName("text")
+            $textNodes.Item(0).AppendChild($template.CreateTextNode("{t_clean}")) > $null
+            $textNodes.Item(1).AppendChild($template.CreateTextNode("{m_clean}")) > $null
+            $toast = [Windows.UI.Notifications.ToastNotification]::new($template)
+            [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier("RoleSync").Show($toast)
+            '''
+            subprocess.run(["powershell", "-NoProfile", "-Command", ps_code], capture_output=True, timeout=5)
+            logger.info("Windows WinRT toast notification dispatched: %s", title)
+            return True
+        except Exception as err:
+            logger.warning("WinRT toast fallback failed: %s", err)
+            return False
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -879,13 +969,8 @@ class Watchdog:
 
         for job in pending:
             deadline_str: str = job["deadline"]  # the raw string from the DB
-            try:
-                # Parse as a date then convert to a tz-aware datetime at midnight UTC.
-                # Using %Y-%m-%d is the canonical ISO format; other formats will raise ValueError.
-                deadline_dt: datetime = datetime.strptime(deadline_str, "%Y-%m-%d").replace(
-                    tzinfo=timezone.utc  # attach UTC so subtraction is defined against datetime.now(utc)
-                )
-            except ValueError:
+            deadline_dt, friendly_text, is_urgent = parse_deadline_info(deadline_str)
+            if not deadline_dt:
                 # Unparseable deadline (e.g. "ASAP", "rolling") — skip gracefully
                 logger.warning(
                     "Cannot parse deadline '%s' for job id=%d; skipping",
@@ -1011,6 +1096,11 @@ class LifecycleManager:
         )
 
         logger.info("LifecycleManager ready (vault: %s)", VAULT_DIR)
+
+    @property
+    def notifier(self) -> NotificationService:
+        """Access the underlying NotificationService."""
+        return self._notifier
 
     # ── Job registration ───────────────────────────────────────────────────────
 
