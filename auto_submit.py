@@ -182,11 +182,11 @@ class CandidateProfile:
             If a required field is absent from `data`.
         """
         return cls(
-            full_name=data["full_name"],        # Mandatory — forms always ask for a name
-            email=data["email"],                # Mandatory — primary contact
-            phone=data.get("phone", ""),        # Optional in some portals
-            linkedin_url=data.get("linkedin_url", ""),  # Optional but highly recommended
-            location=data.get("location", ""),  # Optional location string
+            full_name=data.get("full_name") or data.get("name", "Candidate"),
+            email=data.get("email", ""),
+            phone=data.get("phone", ""),
+            linkedin_url=data.get("linkedin_url") or data.get("linkedin", ""),
+            location=data.get("location", ""),
         )
 
 
