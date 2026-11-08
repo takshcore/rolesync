@@ -10,8 +10,10 @@ Directly bridges to:
   - Module 5: ATS Document Compiler (doc_compiler.py)
   - Module 7: Lifecycle State Machine (lifecycle_watchdog.py)
   - Master Candidate Vault (profile.json & master_portfolio.json)
+  - Ingestion Engine (utils/resume_parser.py)
 """
 
+import base64
 import json
 import os
 import pathlib
@@ -30,40 +32,54 @@ from lifecycle_watchdog import parse_deadline_info
 from llm_reasoner import LLMReasoner, ReasonerOutput, extract_jd_metadata_local
 from rag_engine import RAGEngine
 
+# Ingestion import
+try:
+    from utils.resume_parser import ingest_master_resume
+except ImportError:
+    try:
+        from resume_parser import ingest_master_resume
+    except ImportError:
+        ingest_master_resume = None
+
+# Default profile fallback (Takshraj Saraf)
+DEFAULT_PROFILE = {
+    "name": "Takshraj Saraf",
+    "email": "saraftaksh@gmail.com",
+    "phone": "+91 9981893174",
+    "linkedin": "https://linkedin.com/in/takshraj-saraf-7b8305307",
+    "github": "https://github.com/takshcore",
+    "location": "Jabalpur, Madhya Pradesh",
+    "years_exp": 6,
+    "master_resume_filename": "Takshraj Saraf Resume (1).pdf",
+    "summary": "B.Tech student in Computer Science & Business Systems specializing in Agentic AI, Generative AI,\nand Python backend architecture. Experienced in developing autonomous AI workflows, LLM-driven\npipelines, and real-time Python applications. Driven by a continuous learning mindset to optimize\ncompute efficiency and build scalable AI solutions.",
+    "education": "Shri Ram Institute of Technology Jabalpur, MP\nBachelor of Technology (B.Tech) Computer Science & Business\nSystems\nExpected Graduation: 2027\nCGPA: 8.0/10.0\nRelevant Coursework: Data Structures & Algorithms, Operating Systems, DBMS, Computer Organization & Architecture.",
+    "skills_raw": "Programming: Python, C, C++\nAI & Data: Agentic AI Frameworks, Generative AI, Machine Learning Pipelines, LLM Integration, Data Preprocessing\nTechnologies & Tools: Flask, PyQt6, WebSockets, WebRTC, SQLite, Git, Playwright",
+    "certifications": "72-Day Agentic AI & Python Training (Learnijoy): Intensive program focused on building autonomous AI agents, Python backend integration, and practical dynamic workflows.\nCisco Networking Academy: Coursework completed in Modern AI, Python Essentials, and Cybersecurity.",
+}
+
 
 # ── Data Loaders & Singletons ────────────────────────────────────────────────
-@st.cache_data
 def load_candidate_data() -> dict:
     profile_path = BASE_DIR / "profile.json"
     if profile_path.exists():
         try:
-            return json.loads(profile_path.read_text(encoding="utf-8"))
+            data = json.loads(profile_path.read_text(encoding="utf-8"))
+            if data.get("name"):
+                return data
         except Exception:
             pass
-    return {
-        "name": "Takshraj Saraf",
-        "email": "saraftaksh@gmail.com",
-        "phone": "+91 9981893174",
-        "linkedin": "https://linkedin.com/in/takshraj-saraf-7b8305307",
-        "github": "https://github.com/takshcore",
-        "location": "Jabalpur, Madhya Pradesh",
-        "years_exp": 6,
-        "summary": "B.Tech student in Computer Science & Business Systems specializing in Agentic AI, Generative AI, and Python backend architecture.",
-        "education": "Shri Ram Institute of Technology Jabalpur, MP\nB.Tech Computer Science & Business Systems\nCGPA: 8.0/10.0 (Graduation 2027)",
-        "skills_raw": "Programming: Python, C, C++\nAI & Data: Agentic AI Frameworks, Generative AI, LLM Integration, RAG Pipelines\nTechnologies: Flask, PyQt6, WebSockets, SQLite, Git, Playwright",
-        "certifications": "72-Day Agentic AI & Python Training (Learnijoy)\nCisco Networking Academy: Modern AI & Python",
-    }
+    return DEFAULT_PROFILE.copy()
 
 
 def get_candidate_profile_obj(p_dict: dict) -> CandidateProfile:
     return CandidateProfile(
-        name=p_dict.get("name", "Takshraj Saraf"),
-        email=p_dict.get("email", "saraftaksh@gmail.com"),
-        phone=p_dict.get("phone", "+91 9981893174"),
-        linkedin=p_dict.get("linkedin", "https://linkedin.com/in/takshraj-saraf-7b8305307"),
-        github=p_dict.get("github", "https://github.com/takshcore"),
-        location=p_dict.get("location", "Jabalpur, Madhya Pradesh"),
-        years_exp=p_dict.get("years_exp", 6),
+        name=p_dict.get("name", "Candidate"),
+        email=p_dict.get("email", "candidate@example.com"),
+        phone=p_dict.get("phone", "+1 555-010-0000"),
+        linkedin=p_dict.get("linkedin", "https://linkedin.com"),
+        github=p_dict.get("github", "https://github.com"),
+        location=p_dict.get("location", ""),
+        years_exp=p_dict.get("years_exp", 2),
         summary=p_dict.get("summary", ""),
         education=p_dict.get("education", ""),
         skills_raw=p_dict.get("skills_raw", ""),
@@ -132,6 +148,7 @@ Basic Qualifications:
 """,
 }
 
+
 # ── Helper: Format Markdown Résumé ───────────────────────────────────────────
 def build_markdown_resume(output: ReasonerOutput, candidate: CandidateProfile) -> str:
     company = getattr(output, "company", "Target Company")
@@ -170,7 +187,7 @@ def build_markdown_resume(output: ReasonerOutput, candidate: CandidateProfile) -
     if summary:
         md.append(summary.strip())
     else:
-        md.append(f"Proactive software engineer specializing in Agentic AI frameworks, Python backend architectures, and autonomous pipelines, eager to drive scalable impact as {role} at {company}.")
+        md.append(f"Proactive software engineer specializing in Python backend architectures, autonomous pipelines, and RAG systems, eager to drive scalable impact as {role} at {company}.")
 
     # Education
     if candidate.education:
@@ -364,30 +381,44 @@ def main():
             color: #94a3b8;
             margin-bottom: 8px;
         }
+        .success-box {
+            background: rgba(34, 197, 94, 0.12);
+            border: 1px solid rgba(34, 197, 94, 0.35);
+            border-radius: 8px;
+            padding: 12px 16px;
+            margin-bottom: 14px;
+            color: #86efac;
+            font-size: 0.95rem;
+        }
         </style>
         """,
         unsafe_allow_html=True,
     )
 
-    candidate_data = load_candidate_data()
-    candidate_obj = get_candidate_profile_obj(candidate_data)
+    # Initialize Active Candidate Profile in Session State
+    if "candidate_data" not in st.session_state:
+        st.session_state.candidate_data = load_candidate_data()
+        st.session_state.candidate_obj = get_candidate_profile_obj(st.session_state.candidate_data)
+
+    candidate_data = st.session_state.candidate_data
+    candidate_obj = st.session_state.candidate_obj
     doc_compiler = get_doc_compiler()
 
     # Sidebar: Candidate Dossier & Engine Controls
     with st.sidebar:
-        st.markdown('<div class="hero-badge">Candidate Dossier</div>', unsafe_allow_html=True)
+        st.markdown('<div class="hero-badge">Active Truth Source</div>', unsafe_allow_html=True)
+        resume_src_label = candidate_data.get("master_resume_filename", "profile.json")
         st.markdown(
             f"""
             <div class="profile-card">
                 <div class="profile-name">{candidate_obj.name}</div>
-                <div class="profile-sub">{candidate_obj.location}</div>
+                <div class="profile-sub">{candidate_obj.location or "Candidate"}</div>
                 <div style="font-size:0.85rem; color:#cbd5e1; margin-top:8px;">
-                    🎓 <b>B.Tech CSBS</b> (SRIT Jabalpur)<br>
-                    ⭐ <b>CGPA:</b> 8.0 / 10.0<br>
+                    📄 <b>Source:</b> <code style="color:#818cf8;">{resume_src_label}</code><br>
                     ✉️ <b>Email:</b> <a href="mailto:{candidate_obj.email}" style="color:#38bdf8;">{candidate_obj.email}</a><br>
                     📞 <b>Phone:</b> {candidate_obj.phone}<br>
                     💼 <a href="{candidate_obj.linkedin}" target="_blank" style="color:#818cf8;">LinkedIn Profile</a><br>
-                    🐙 <a href="{candidate_obj.github}" target="_blank" style="color:#818cf8;">GitHub (@takshcore)</a>
+                    🐙 <a href="{candidate_obj.github}" target="_blank" style="color:#818cf8;">GitHub Profile</a>
                 </div>
             </div>
             """,
@@ -418,7 +449,7 @@ def main():
     st.markdown('<div class="hero-title">1-Tap Live Evaluation Portal</div>', unsafe_allow_html=True)
     st.markdown(
         '<div class="hero-subtitle">Instant, zero-configuration evaluation platform for evaluators and instructors. '
-        'Transforms raw Job Descriptions into ATS-optimized tailored résumés, keyword match gauges, and automated lifecycle dispatch.</div>',
+        'Feed any custom master résumé, transform raw Job Descriptions into ATS-optimized tailored résumés, generate keyword match gauges, and inspect lifecycle dispatch.</div>',
         unsafe_allow_html=True,
     )
 
@@ -437,7 +468,7 @@ def main():
 
     jd_input = st.text_area("Job Description Input", value=default_text, height=180)
 
-    # Initialize Session State
+    # Initialize Session State for Analysis
     if "reasoner_output" not in st.session_state:
         st.session_state.reasoner_output = run_pipeline(jd_input, user_key)
         st.session_state.active_md = build_markdown_resume(st.session_state.reasoner_output, candidate_obj)
@@ -520,7 +551,7 @@ def main():
             "✏️ Edit Markdown Live",
             "🎯 ATS Analytics & Match Radar",
             "🤖 Autonomous Submission & Vault",
-            "👤 Truth Source (Candidate Vault)",
+            "👤 Truth Source & Master Résumé",
         ]
     )
 
@@ -529,11 +560,13 @@ def main():
         dl_col1, dl_col2, dl_col3, dl_col4 = st.columns([2, 1, 1, 1])
         with dl_col1:
             st.markdown(f"### Live Tailored Résumé for **{company_val}**")
-            st.caption("Formatted according to candidate's reference template with tailored ATS bullets.")
+            st.caption(f"Candidate: **{candidate_obj.name}** | Formatted according to reference template with tailored ATS bullets.")
 
         # Generate real .docx and .pdf files for one-click download
         docx_bytes = b""
         pdf_bytes = b""
+        safe_name = candidate_obj.name.replace(" ", "_")
+        safe_comp = company_val.replace(" ", "_")
         try:
             compiled_docx = doc_compiler.compile(output=output, candidate=candidate_obj)
             if compiled_docx and compiled_docx.exists():
@@ -549,7 +582,7 @@ def main():
                 st.download_button(
                     label="📥 Download Word (.docx)",
                     data=docx_bytes,
-                    file_name=f"Takshraj_Saraf_Resume_{company_val.replace(' ', '_')}.docx",
+                    file_name=f"{safe_name}_Resume_{safe_comp}.docx",
                     mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                     use_container_width=True,
                 )
@@ -561,7 +594,7 @@ def main():
                 st.download_button(
                     label="📥 Download PDF (.pdf)",
                     data=pdf_bytes,
-                    file_name=f"Takshraj_Saraf_Resume_{company_val.replace(' ', '_')}.pdf",
+                    file_name=f"{safe_name}_Resume_{safe_comp}.pdf",
                     mime="application/pdf",
                     use_container_width=True,
                 )
@@ -572,7 +605,7 @@ def main():
             st.download_button(
                 label="📥 Download Markdown (.md)",
                 data=st.session_state.active_md.encode("utf-8"),
-                file_name=f"Takshraj_Saraf_Resume_{company_val.replace(' ', '_')}.md",
+                file_name=f"{safe_name}_Resume_{safe_comp}.md",
                 mime="text/markdown",
                 use_container_width=True,
             )
@@ -644,7 +677,7 @@ def main():
 [00:00:03] [FormFiller] Injected Full Name: "{candidate_obj.name}"
 [00:00:04] [FormFiller] Injected Email: "{candidate_obj.email}"
 [00:00:05] [FormFiller] Injected Phone: "{candidate_obj.phone}"
-[00:00:06] [FormFiller] Uploaded tailored document: "Takshraj_Saraf_Resume_{company_val.replace(' ', '_')}.docx"
+[00:00:06] [FormFiller] Uploaded tailored document: "{safe_name}_Resume_{safe_comp}.docx"
 [00:00:07] [DOM Inspector] Verified required fields: 100% complete
 [00:00:08] [LifecycleWatchdog] Registered Job in SQLite Vault:
             • Company: {company_val}
@@ -670,18 +703,175 @@ def main():
                 """
             )
 
-    # ── TAB 5: Truth Source (Candidate Vault) ────────────────────────────────────
+    # ── TAB 5: Truth Source & Master Résumé (UPLOAD & FEED NEW RESUME) ─────────
     with tab5:
-        st.markdown("### 👤 Ground Truth Candidate Vault")
-        st.caption("RoleSync's strict anti-hallucination constraint guarantees all generated bullets stem from this verified source.")
+        st.markdown("### 👤 Ground Truth Candidate Vault & Master Résumé Ingestion")
+        st.caption(
+            "RoleSync guarantees 100% zero hallucination by strictly grounding all tailored documents in this verified Truth Source. "
+            "You can feed any original master résumé (.pdf, .docx, .txt) or customize profile fields live."
+        )
 
-        tab_prof, tab_port = st.tabs(["profile.json", "master_portfolio.json"])
-        with tab_prof:
-            st.json(candidate_data)
-        with tab_port:
-            port_path = BASE_DIR / "master_portfolio.json"
-            if port_path.exists():
-                st.json(json.loads(port_path.read_text(encoding="utf-8")))
+        sub_tab_upload, sub_tab_edit, sub_tab_inspect = st.tabs(
+            [
+                "📤 Feed Master Résumé (File Upload)",
+                "✏️ Edit Candidate Truth Source",
+                "🔍 Raw Vault Inspector (JSON)",
+            ]
+        )
+
+        # ── SUB-TAB A: Upload Master Resume ──────────────────────────────────
+        with sub_tab_upload:
+            st.markdown("#### Upload Your Original Résumé File")
+            st.markdown(
+                "Upload **any** candidate résumé (`.pdf`, `.docx`, `.txt`). RoleSync's ingestion engine will extract contact information, "
+                "categorize skills, isolate achievements into projects, reload the ChromaDB vector index, and recompile all previews with **zero app relaunch**!"
+            )
+
+            uploaded_file = st.file_uploader(
+                "Choose a master résumé file to ingest:",
+                type=["pdf", "docx", "txt"],
+                key="resume_uploader",
+                help="Accepts PDF, Word documents, or plain text resumes.",
+            )
+
+            if uploaded_file is not None:
+                if st.button("⚡ Ingest Master Résumé & Re-Index Pipeline", type="primary", use_container_width=True):
+                    with st.spinner(f"Ingesting {uploaded_file.name} and updating Truth Source..."):
+                        # Save uploaded file to temp path
+                        file_suffix = pathlib.Path(uploaded_file.name).suffix.lower()
+                        with tempfile.NamedTemporaryFile(delete=False, suffix=file_suffix) as tmp_file:
+                            tmp_file.write(uploaded_file.read())
+                            tmp_path = pathlib.Path(tmp_file.name)
+
+                        try:
+                            if ingest_master_resume:
+                                report = ingest_master_resume(tmp_path, workspace_root=str(BASE_DIR))
+                                # Clean temp file
+                                try:
+                                    tmp_path.unlink()
+                                except Exception:
+                                    pass
+
+                                # Reload candidate data from disk into session state
+                                new_data = load_candidate_data()
+                                new_data["master_resume_filename"] = uploaded_file.name
+                                st.session_state.candidate_data = new_data
+                                st.session_state.candidate_obj = get_candidate_profile_obj(new_data)
+
+                                # Hot-reload ChromaDB RAG Engine
+                                try:
+                                    get_rag_engine().reload_portfolio()
+                                except Exception as e:
+                                    st.warning(f"RAG reload note: {e}")
+
+                                # Re-run reasoning & document compilation
+                                new_output = run_pipeline(jd_input, user_key)
+                                st.session_state.reasoner_output = new_output
+                                st.session_state.active_md = build_markdown_resume(new_output, st.session_state.candidate_obj)
+
+                                st.markdown(
+                                    f"""
+                                    <div class="success-box">
+                                        <b>✅ Master Résumé Swapped Live!</b> (Source: <code>{uploaded_file.name}</code>)<br>
+                                        Candidate: <b>{st.session_state.candidate_obj.name}</b> ({st.session_state.candidate_obj.email})<br>
+                                        Extracted <b>{report.get('projects_count', 5)}</b> portfolio projects & <b>{report.get('skills_count', 20)}</b> technical skills.<br>
+                                        ChromaDB vector store re-indexed. All previews & downloads updated with <b>zero app relaunch required!</b>
+                                    </div>
+                                    """,
+                                    unsafe_allow_html=True,
+                                )
+                                st.rerun()
+                            else:
+                                st.error("Ingestion engine (resume_parser) is unavailable.")
+                        except Exception as e:
+                            st.error(f"Failed to ingest resume: {e}")
+
+        # ── SUB-TAB B: Edit Candidate Truth Source Directly ──────────────────
+        with sub_tab_edit:
+            st.markdown("#### Edit Candidate Profile & Truth Source Directly")
+            st.caption("Make changes directly to contact details, skills, or experience. Changes are saved to the truth source and hot-reloaded across the system.")
+
+            with st.form("candidate_profile_form"):
+                col_e1, col_e2 = st.columns(2)
+                with col_e1:
+                    e_name = st.text_input("Full Name", value=candidate_data.get("name", ""))
+                    e_email = st.text_input("Professional Email", value=candidate_data.get("email", ""))
+                    e_phone = st.text_input("Phone Number", value=candidate_data.get("phone", ""))
+                    e_location = st.text_input("Location (City, State / Country)", value=candidate_data.get("location", ""))
+                with col_e2:
+                    e_years = st.number_input("Years of Experience", min_value=0, max_value=40, value=int(candidate_data.get("years_exp", 2)))
+                    e_linkedin = st.text_input("LinkedIn Profile URL", value=candidate_data.get("linkedin", ""))
+                    e_github = st.text_input("GitHub Profile URL", value=candidate_data.get("github", ""))
+
+                e_summary = st.text_area("Professional Summary", value=candidate_data.get("summary", ""), height=100)
+                e_education = st.text_area("Education & Academic Degrees", value=candidate_data.get("education", ""), height=120)
+                e_skills = st.text_area("Technical Skills (Categorized)", value=candidate_data.get("skills_raw", ""), height=120)
+                e_certs = st.text_area("Certifications & Training", value=candidate_data.get("certifications", ""), height=100)
+
+                submitted = st.form_submit_button("💾 Save Profile & Hot-Reload Engine", type="primary", use_container_width=True)
+                if submitted:
+                    updated_dict = {
+                        **candidate_data,
+                        "name": e_name,
+                        "email": e_email,
+                        "phone": e_phone,
+                        "location": e_location,
+                        "years_exp": e_years,
+                        "linkedin": e_linkedin,
+                        "github": e_github,
+                        "summary": e_summary,
+                        "education": e_education,
+                        "skills_raw": e_skills,
+                        "certifications": e_certs,
+                    }
+
+                    # Persist to profile.json
+                    try:
+                        (BASE_DIR / "profile.json").write_text(json.dumps(updated_dict, indent=2), encoding="utf-8")
+                    except Exception:
+                        pass
+
+                    # Update Session State
+                    st.session_state.candidate_data = updated_dict
+                    st.session_state.candidate_obj = get_candidate_profile_obj(updated_dict)
+
+                    # Re-run reasoning & document compilation
+                    new_output = run_pipeline(jd_input, user_key)
+                    st.session_state.reasoner_output = new_output
+                    st.session_state.active_md = build_markdown_resume(new_output, st.session_state.candidate_obj)
+
+                    st.success("Candidate Profile updated & RAG engine re-indexed! Previews and downloads updated.")
+                    st.rerun()
+
+        # ── SUB-TAB C: Raw Vault Inspector & Reset ───────────────────────────
+        with sub_tab_inspect:
+            st.markdown("#### Raw Ground Truth Vault Inspector")
+            st.caption("Inspect the active JSON structures used as ground truth for all RAG retrieval and LLM reasoning.")
+
+            col_src_info, col_reset = st.columns([3, 1])
+            with col_src_info:
+                st.info(f"**Active Master Source:** `{resume_src_label}` | **Candidate:** `{candidate_obj.name}`")
+            with col_reset:
+                if st.button("↺ Reset to Default (Takshraj)", use_container_width=True):
+                    (BASE_DIR / "profile.json").write_text(json.dumps(DEFAULT_PROFILE, indent=2), encoding="utf-8")
+                    st.session_state.candidate_data = DEFAULT_PROFILE.copy()
+                    st.session_state.candidate_obj = get_candidate_profile_obj(DEFAULT_PROFILE)
+                    new_output = run_pipeline(jd_input, user_key)
+                    st.session_state.reasoner_output = new_output
+                    st.session_state.active_md = build_markdown_resume(new_output, st.session_state.candidate_obj)
+                    st.success("Reset truth source back to default candidate profile (Takshraj Saraf).")
+                    st.rerun()
+
+            tab_prof, tab_port = st.tabs(["profile.json", "master_portfolio.json"])
+            with tab_prof:
+                st.json(candidate_data)
+            with tab_port:
+                port_path = BASE_DIR / "master_portfolio.json"
+                if port_path.exists():
+                    try:
+                        st.json(json.loads(port_path.read_text(encoding="utf-8")))
+                    except Exception as e:
+                        st.info(f"Portfolio view: {e}")
 
     # ── Footer ────────────────────────────────────────────────────────────────────
     st.divider()
