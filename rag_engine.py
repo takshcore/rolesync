@@ -240,14 +240,18 @@ def _project_to_document(project: dict[str, Any]) -> str:
     highlights_str: str = "\n- ".join(project.get("highlights", []))
     domain_str: str = project.get("domain", "")
 
-    # Build a structured prose block.  Order matters: the most distinctive
+    # Build a structured prose block. Order matters: the most distinctive
     # fields (name, tagline, description) come first so they anchor the
     # embedding's semantic direction.
+    proj_name: str = project.get("name") or project.get("id") or "Project"
+    tagline_str: str = project.get("tagline") or ""
+    desc_str: str = project.get("description") or ""
+
     document: str = (
-        f"Project: {project['name']}\n"
-        f"Tagline: {project['tagline']}\n"
+        f"Project: {proj_name}\n"
+        f"Tagline: {tagline_str}\n"
         f"Domain: {domain_str}\n"
-        f"Description: {project['description']}\n"
+        f"Description: {desc_str}\n"
         f"Tech stack: {tech_str}\n"
         f"Key achievements:\n- {highlights_str}\n"
         f"Keywords: {keywords_str}"
@@ -375,10 +379,12 @@ class RAGEngine:
         embeddings: list[list[float]] = []  # Corresponding float vectors
         metadatas: list[dict[str, Any]] = []  # Structured metadata for post-filter queries
 
-        for project in self.portfolio:
+        for idx, project in enumerate(self.portfolio, start=1):
             # Use the project's own "id" field as the ChromaDB document ID so
             # that upserts are deterministic and human-readable.
-            ids.append(project["id"])
+            proj_id = project.get("id") or f"proj_{idx}"
+            proj_name = project.get("name") or proj_id or f"Project {idx}"
+            ids.append(proj_id)
 
             # Serialise the project to a rich prose document before embedding,
             # so the vector captures the full context of the project.
@@ -396,7 +402,7 @@ class RAGEngine:
             # portfolio JSON.
             metadatas.append(
                 {
-                    "name": project["name"],           # Human-readable label
+                    "name": proj_name,                    # Human-readable label
                     "domain": project.get("domain", ""),  # Domain string for display
                     "year": int(project.get("year", 0)),  # Year for recency sorting
                     "tech_stack": ", ".join(project.get("tech_stack", [])),  # Searchable tech list
@@ -475,31 +481,35 @@ class RAGEngine:
         # Build a convenience lookup so we can join ChromaDB results back to the
         # full portfolio dict (which has richer data than the stored metadata).
         portfolio_lookup: dict[str, dict[str, Any]] = {
-            p["id"]: p for p in self.portfolio  # Key by project id
+            (p.get("id") or f"proj_{idx}"): p for idx, p in enumerate(self.portfolio, start=1)
         }
 
         # ChromaDB returns parallel lists wrapped in an outer list (because query
         # accepts batches).  Index 0 unwraps the single-query batch.
         result_ids: list[str] = raw_results["ids"][0]
         result_docs: list[str] = raw_results["documents"][0]
-        result_metas: list[dict] = raw_results["metadatas"][0]
-        result_dists: list[float] = raw_results["distances"][0]
+        result_metas: list[dict] = raw_results["metadatas"][0] if raw_results.get("metadatas") else []
+        result_dists: list[float] = raw_results["distances"][0] if raw_results.get("distances") else []
 
         # Zip the parallel lists into a list of unified result dicts.
         results: list[dict[str, Any]] = []
-        for doc_id, doc_text, meta, dist in zip(
-            result_ids, result_docs, result_metas, result_dists
+        for rank, (doc_id, doc_text, meta, dist) in enumerate(
+            zip(result_ids, result_docs, result_metas, result_dists), start=1
         ):
+            meta_dict = meta if isinstance(meta, dict) else {}
+            item_project = portfolio_lookup.get(doc_id, {})
+            item_name = meta_dict.get("name") or item_project.get("name") or doc_id or f"Project {rank}"
+
             results.append(
                 {
-                    "id": doc_id,            # Project identifier
-                    "name": meta["name"],    # Human-readable name from metadata
-                    "document": doc_text,    # Full text that was embedded
-                    "metadata": meta,        # Lightweight metadata dict
-                    "distance": dist,        # Cosine distance; 0 = identical
+                    "id": doc_id,                # Project identifier
+                    "name": item_name,           # Human-readable name
+                    "document": doc_text,        # Full text that was embedded
+                    "metadata": meta_dict,       # Lightweight metadata dict
+                    "distance": dist,            # Cosine distance; 0 = identical
                     # Attach the original full portfolio dict so callers have
                     # access to highlights, keywords, role, etc.
-                    "project": portfolio_lookup.get(doc_id, {}),
+                    "project": item_project,
                 }
             )
 
