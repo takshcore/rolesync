@@ -388,17 +388,17 @@ def ingest_master_resume(
     # Merge contact & section data preserving existing values if extraction missed
     merged_profile = {
         **existing_profile,
-        "name": contact_data["name"] or existing_profile.get("name", "Candidate"),
-        "email": contact_data["email"] or existing_profile.get("email", "candidate@example.com"),
-        "phone": contact_data["phone"] or existing_profile.get("phone", "+1-555-010-0000"),
-        "linkedin": contact_data["linkedin"] or existing_profile.get("linkedin", "https://linkedin.com"),
-        "github": contact_data["github"] or existing_profile.get("github", "https://github.com"),
-        "location": contact_data["location"] or existing_profile.get("location", ""),
-        "years_exp": contact_data["years_exp"] or existing_profile.get("years_exp", 2),
-        "summary": sec_data["summary"] or existing_profile.get("summary", ""),
-        "education": sec_data["education"] or existing_profile.get("education", ""),
-        "skills_raw": sec_data["skills_raw"] or existing_profile.get("skills_raw", ""),
-        "certifications": sec_data["certifications"] or existing_profile.get("certifications", ""),
+        "name": (contact_data.get("name") or existing_profile.get("name") or "Candidate").strip(),
+        "email": (contact_data.get("email") or existing_profile.get("email") or "candidate@example.com").strip(),
+        "phone": (contact_data.get("phone") or existing_profile.get("phone") or "+1-555-010-0000").strip(),
+        "linkedin": (contact_data.get("linkedin") or existing_profile.get("linkedin") or "https://linkedin.com").strip(),
+        "github": (contact_data.get("github") or existing_profile.get("github") or "https://github.com").strip(),
+        "location": (contact_data.get("location") or existing_profile.get("location") or "").strip(),
+        "years_exp": contact_data.get("years_exp") or existing_profile.get("years_exp") or 2,
+        "summary": (sec_data.get("summary") or existing_profile.get("summary") or "").strip(),
+        "education": (sec_data.get("education") or existing_profile.get("education") or "").strip(),
+        "skills_raw": (sec_data.get("skills_raw") or existing_profile.get("skills_raw") or "").strip(),
+        "certifications": (sec_data.get("certifications") or existing_profile.get("certifications") or "").strip(),
         "master_resume_path": str(target_archive),
         "master_resume_filename": src_path.name,
     }
@@ -407,12 +407,27 @@ def ingest_master_resume(
 
     # 4. Parse projects/experience and update master_portfolio.json
     parsed_projects = extract_projects_and_experience(raw_text)
-    portfolio_path = ws_root / "master_portfolio.json"
+    # Ensure every single project dict strictly contains all required schema keys
+    clean_projects = []
+    for idx, p in enumerate(parsed_projects, start=1):
+        clean_p = {
+            "id": p.get("id") or f"project_{idx}",
+            "name": p.get("name") or f"Project / Experience {idx}",
+            "tagline": p.get("tagline") or "Software engineering experience",
+            "description": p.get("description") or (p.get("name") or f"Project {idx}"),
+            "tech_stack": p.get("tech_stack") if isinstance(p.get("tech_stack"), list) else ["Python", "Software Engineering"],
+            "domain": p.get("domain") or "Software Engineering & Systems Development",
+            "highlights": p.get("highlights") if isinstance(p.get("highlights"), list) else [p.get("description") or f"Project {idx}"],
+            "role": p.get("role") or "Software Developer / Engineer",
+            "year": int(p.get("year", 2024)),
+            "keywords": p.get("keywords") if isinstance(p.get("keywords"), list) else ["software", "engineering", "development"],
+        }
+        clean_projects.append(clean_p)
 
-    # Merge with existing portfolio if desired, or replace with candidate's actual projects
-    portfolio_payload = {"projects": parsed_projects}
+    portfolio_path = ws_root / "master_portfolio.json"
+    portfolio_payload = {"projects": clean_projects}
     portfolio_path.write_text(json.dumps(portfolio_payload, indent=2), encoding="utf-8")
-    logger.info("Updated %s with %d parsed projects/experiences.", portfolio_path, len(parsed_projects))
+    logger.info("Updated %s with %d parsed projects/experiences.", portfolio_path, len(clean_projects))
 
     # Also save raw resume text to disk for direct reference
     raw_txt_path = vault_dir / "master_resume_text.txt"
@@ -422,9 +437,11 @@ def ingest_master_resume(
         "status": "success",
         "filename": src_path.name,
         "archive_path": str(target_archive),
-        "name": merged_profile["name"],
-        "email": merged_profile["email"],
-        "project_count": len(parsed_projects),
+        "name": merged_profile.get("name", "Candidate"),
+        "email": merged_profile.get("email", "candidate@example.com"),
+        "project_count": len(clean_projects),
+        "projects_count": len(clean_projects),
+        "skills_count": len(merged_profile.get("skills_raw", "").split("\n")),
         "raw_text_len": len(raw_text),
-        "projects": parsed_projects,
+        "projects": clean_projects,
     }
