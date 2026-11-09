@@ -470,13 +470,19 @@ def main():
 
     # Initialize Session State for Analysis
     if "reasoner_output" not in st.session_state:
-        st.session_state.reasoner_output = run_pipeline(jd_input, user_key)
+        try:
+            st.session_state.reasoner_output = run_pipeline(jd_input, user_key)
+        except Exception:
+            st.session_state.reasoner_output = extract_jd_metadata_local(jd_input, "")
         st.session_state.active_md = build_markdown_resume(st.session_state.reasoner_output, candidate_obj)
 
     # Action Button
     if st.button("🚀 Analyze & Tailor Résumé with RoleSync", type="primary", use_container_width=True):
         with st.spinner("Executing dense vector retrieval + cognitive LLM tailoring..."):
-            output = run_pipeline(jd_input, user_key)
+            try:
+                output = run_pipeline(jd_input, user_key)
+            except Exception:
+                output = extract_jd_metadata_local(jd_input, "")
             st.session_state.reasoner_output = output
             st.session_state.active_md = build_markdown_resume(output, candidate_obj)
             st.success(f"Tailoring complete for {getattr(output, 'company', 'Company')} ({getattr(output, 'role', 'Role')})!")
