@@ -73,17 +73,17 @@ def load_candidate_data() -> dict:
 
 def get_candidate_profile_obj(p_dict: dict) -> CandidateProfile:
     return CandidateProfile(
-        name=p_dict.get("name", "Candidate"),
-        email=p_dict.get("email", "candidate@example.com"),
-        phone=p_dict.get("phone", "+1 555-010-0000"),
-        linkedin=p_dict.get("linkedin", "https://linkedin.com"),
-        github=p_dict.get("github", "https://github.com"),
-        location=p_dict.get("location", ""),
-        years_exp=p_dict.get("years_exp", 2),
-        summary=p_dict.get("summary", ""),
-        education=p_dict.get("education", ""),
-        skills_raw=p_dict.get("skills_raw", ""),
-        certifications=p_dict.get("certifications", ""),
+        name=p_dict.get("name") or "Candidate",
+        email=p_dict.get("email") or "candidate@example.com",
+        phone=p_dict.get("phone") or "+1 555-010-0000",
+        linkedin=p_dict.get("linkedin") or "https://linkedin.com",
+        github=p_dict.get("github") or "https://github.com",
+        location=p_dict.get("location") or "",
+        years_exp=p_dict.get("years_exp") or 2,
+        summary=p_dict.get("summary") or "",
+        education=p_dict.get("education") or "",
+        skills_raw=p_dict.get("skills_raw") or "",
+        certifications=p_dict.get("certifications") or "",
     )
 
 
@@ -822,16 +822,24 @@ def main():
                                     st.warning(f"RAG reload note: {e}")
 
                                 # Re-run reasoning & document compilation
-                                new_output = run_pipeline(jd_input, user_key)
-                                st.session_state.reasoner_output = new_output
-                                st.session_state.active_md = build_markdown_resume(new_output, st.session_state.candidate_obj)
+                                try:
+                                    new_output = run_pipeline(jd_input, user_key)
+                                    st.session_state.reasoner_output = new_output
+                                    st.session_state.active_md = build_markdown_resume(new_output, st.session_state.candidate_obj)
+                                except Exception as pipe_err:
+                                    st.warning(f"Note on pipeline recompilation: {pipe_err}")
+
+                                cand_name = getattr(st.session_state.candidate_obj, "name", "Candidate")
+                                cand_email = getattr(st.session_state.candidate_obj, "email", "candidate@example.com")
+                                p_count = report.get("project_count") or report.get("projects_count") or 5
+                                s_count = report.get("skills_count") or 10
 
                                 st.markdown(
                                     f"""
                                     <div class="success-box">
                                         <b>✅ Master Résumé Swapped Live!</b> (Source: <code>{uploaded_file.name}</code>)<br>
-                                        Candidate: <b>{st.session_state.candidate_obj.name}</b> ({st.session_state.candidate_obj.email})<br>
-                                        Extracted <b>{report.get('projects_count', 5)}</b> portfolio projects & <b>{report.get('skills_count', 20)}</b> technical skills.<br>
+                                        Candidate: <b>{cand_name}</b> ({cand_email})<br>
+                                        Extracted <b>{p_count}</b> portfolio projects & <b>{s_count}</b> technical skills.<br>
                                         ChromaDB vector store re-indexed. All previews & downloads updated with <b>zero app relaunch required!</b>
                                     </div>
                                     """,
@@ -841,7 +849,9 @@ def main():
                             else:
                                 st.error("Ingestion engine (resume_parser) is unavailable.")
                         except Exception as e:
-                            st.error(f"Failed to ingest resume: {e}")
+                            import traceback
+                            traceback.print_exc()
+                            st.error(f"Failed to ingest resume ({type(e).__name__}): {e}")
 
         # ── SUB-TAB B: Edit Candidate Truth Source Directly ──────────────────
         with sub_tab_edit:
